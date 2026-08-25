@@ -28,8 +28,11 @@ rules" (section 49) as binding.
 ## Before finishing any change
 
 1. `npm test`
-2. `npm run build`
-3. Update session-handoff.md and next-steps.md if the change is
+2. `npm run lint`
+3. `npm run build`
+4. `npm run test:e2e` (must exit cleanly - if it hangs, see the comment in
+   `playwright.config.ts` before chaining shell commands in `webServer`)
+5. Update session-handoff.md and next-steps.md if the change is
    session-ending or shifts what should happen next.
 
 ## Licensing

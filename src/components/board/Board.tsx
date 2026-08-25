@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameStateSnapshot, PromotionPiece, SquareId } from '../../chess/chessTypes';
 import { isLightSquare, orderedSquares, type BoardOrientation } from './boardGeometry';
 import { pieceAccessibleName, pieceGlyph } from './pieceGlyphs';
@@ -9,11 +9,17 @@ interface BoardProps {
   snapshot: GameStateSnapshot;
   orientation: BoardOrientation;
   /** Squares the currently selected piece may legally move to. */
-  legalTargets: string[];
+  legalTargets: SquareId[];
   selectedSquare: SquareId | null;
   interactionDisabled?: boolean;
   onSelectSquare: (square: SquareId) => void;
   onMove: (from: SquareId, to: SquareId, promotion?: PromotionPiece) => void;
+  /**
+   * Domain-provided predicate: does this legal from/to pair require a
+   * promotion choice? The board never infers this itself (e.g. by checking
+   * ranks) - that is chess-rule knowledge and belongs in the chess domain.
+   */
+  requiresPromotion: (from: SquareId, to: SquareId) => boolean;
 }
 
 /**
@@ -29,10 +35,15 @@ export function Board({
   interactionDisabled = false,
   onSelectSquare,
   onMove,
+  requiresPromotion,
 }: BoardProps) {
   const [pendingPromotion, setPendingPromotion] = useState<
     { from: SquareId; to: SquareId } | null
   >(null);
+  // The square button that triggered the promotion dialog, so focus can
+  // return to it once the dialog closes (accessibility requirement: focus
+  // must not simply vanish into the document body).
+  const promotionOriginRef = useRef<HTMLButtonElement | null>(null);
 
   const squares = useMemo(() => orderedSquares(orientation), [orientation]);
   const pieceBySquare = useMemo(() => {
@@ -50,14 +61,12 @@ export function Board({
     )?.square;
   }, [snapshot.isCheck, snapshot.pieces, snapshot.turn]);
 
-  function handleSquareClick(square: SquareId) {
+  function handleSquareClick(square: SquareId, target: HTMLButtonElement) {
     if (interactionDisabled) return;
 
     if (selectedSquare && legalTargets.includes(square)) {
-      const movingPiece = pieceBySquare.get(selectedSquare);
-      const isPromotion =
-        movingPiece?.type === 'p' && (square.endsWith('8') || square.endsWith('1'));
-      if (isPromotion) {
+      if (requiresPromotion(selectedSquare, square)) {
+        promotionOriginRef.current = target;
         setPendingPromotion({ from: selectedSquare, to: square });
         return;
       }
@@ -67,6 +76,23 @@ export function Board({
 
     onSelectSquare(square);
   }
+
+  function closePromotionDialog() {
+    setPendingPromotion(null);
+  }
+
+  const boardInteractionDisabled = interactionDisabled || pendingPromotion !== null;
+
+  // Restore focus only after the board's squares are re-enabled in the DOM
+  // (i.e. after this state change commits) - a disabled button cannot
+  // receive focus, and the square is still disabled at the moment
+  // closePromotionDialog() itself runs.
+  useEffect(() => {
+    if (pendingPromotion === null && promotionOriginRef.current) {
+      promotionOriginRef.current.focus();
+      promotionOriginRef.current = null;
+    }
+  }, [pendingPromotion]);
 
   return (
     <div className={styles.board} role="grid" aria-label="Chess board">
@@ -91,17 +117,24 @@ export function Board({
           .filter(Boolean)
           .join(' ');
 
+        const description = [
+          piece ? pieceAccessibleName(piece.type, piece.colour) : undefined,
+          isLegalTarget ? 'legal move target' : undefined,
+          isCheckSquare ? 'king in check' : undefined,
+        ]
+          .filter(Boolean)
+          .join(', ');
+
         return (
           <button
             key={square}
             type="button"
             role="gridcell"
             className={classNames}
-            disabled={interactionDisabled}
-            aria-label={
-              piece ? `${square}, ${pieceAccessibleName(piece.type, piece.colour)}` : square
-            }
-            onClick={() => handleSquareClick(square)}
+            disabled={boardInteractionDisabled}
+            aria-selected={isSelected}
+            aria-label={description ? `${square}, ${description}` : square}
+            onClick={(event) => handleSquareClick(square, event.currentTarget)}
           >
             {piece && (
               <span className={styles.piece} data-colour={piece.colour} aria-hidden="true">
@@ -115,10 +148,10 @@ export function Board({
       {pendingPromotion && (
         <PromotionDialog
           colour={snapshot.turn}
-          onCancel={() => setPendingPromotion(null)}
+          onCancel={closePromotionDialog}
           onSelect={(piece) => {
             onMove(pendingPromotion.from, pendingPromotion.to, piece);
-            setPendingPromotion(null);
+            closePromotionDialog();
           }}
         />
       )}

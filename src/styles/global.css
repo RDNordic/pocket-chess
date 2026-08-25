@@ -4,7 +4,8 @@
   --color-surface: #26262c;
   --color-text: #f2f2f2;
   --color-muted: #9a9aa2;
-  --color-accent: #4f8cff;
+  /* #2f6fe0 on white gives ~4.7:1 contrast (WCAG AA for normal text). */
+  --color-accent: #2f6fe0;
   --color-board-light: #eceded;
   --color-board-dark: #6b8f5a;
   --color-highlight: rgba(79, 140, 255, 0.45);

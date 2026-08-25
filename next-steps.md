@@ -1,8 +1,10 @@
 # Next steps
 
-Phase 0 (scaffold) and Phase 1 (deterministic local two-player chess) are
-done - see session-handoff.md for details. This file tracks concrete,
-actionable next work; update it as items are completed or superseded.
+Phase 0 (scaffold), Phase 1 (deterministic local two-player chess), and the
+Phase 1.1 stabilisation pass (independent Codex review fixes: architecture,
+tests, accessibility, licensing, PWA base-path, E2E) are done - see
+session-handoff.md for details. This file tracks concrete, actionable next
+work; update it as items are completed or superseded.
 
 ## Phase 2: Stockfish integration (next)
 

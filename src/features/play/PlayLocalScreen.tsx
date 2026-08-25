@@ -1,28 +1,28 @@
 import { useState } from 'react';
 import { Board } from '../../components/board/Board';
 import type { BoardOrientation } from '../../components/board/boardGeometry';
+import { describeGameOutcome } from '../../chess/gameResult';
 import { useLocalGame } from './useLocalGame';
 import styles from './PlayLocalScreen.module.css';
-
-const STATUS_LABEL: Record<string, string> = {
-  active: 'In progress',
-  checkmate: 'Checkmate',
-  stalemate: 'Stalemate',
-  draw: 'Draw',
-  resigned: 'Resigned',
-  aborted: 'Aborted',
-};
 
 interface PlayLocalScreenProps {
   onExit: () => void;
 }
 
 export function PlayLocalScreen({ onExit }: PlayLocalScreenProps) {
-  const { snapshot, selectedSquare, legalTargets, selectSquare, move, undo, restart } =
-    useLocalGame();
+  const {
+    snapshot,
+    selectedSquare,
+    legalTargets,
+    selectSquare,
+    move,
+    undo,
+    restart,
+    requiresPromotion,
+  } = useLocalGame();
   const [orientation, setOrientation] = useState<BoardOrientation>('white');
 
-  const isGameOver = snapshot.status !== 'active';
+  const isGameOver = snapshot.outcome.status !== 'in-progress';
 
   return (
     <div className={styles.screen}>
@@ -34,9 +34,9 @@ export function PlayLocalScreen({ onExit }: PlayLocalScreenProps) {
       </header>
 
       <p className={styles.status} aria-live="polite">
-        {STATUS_LABEL[snapshot.status]}
-        {snapshot.status === 'active' && ` - ${snapshot.turn} to move`}
-        {snapshot.isCheck && snapshot.status === 'active' && ' (check)'}
+        {isGameOver
+          ? describeGameOutcome(snapshot.outcome)
+          : `${snapshot.turn} to move${snapshot.isCheck ? ' (check)' : ''}`}
       </p>
 
       <Board
@@ -47,6 +47,7 @@ export function PlayLocalScreen({ onExit }: PlayLocalScreenProps) {
         interactionDisabled={isGameOver}
         onSelectSquare={selectSquare}
         onMove={move}
+        requiresPromotion={requiresPromotion}
       />
 
       <div className={styles.controls}>

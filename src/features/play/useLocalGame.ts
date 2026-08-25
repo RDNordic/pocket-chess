@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ChessGame } from '../../chess/ChessGame';
 import type { GameStateSnapshot, PromotionPiece, SquareId } from '../../chess/chessTypes';
+import { readTestSeedFen } from '../../testing/testFenSeam';
 
 /**
  * Coordinates a local two-humans-one-device game against the authoritative
@@ -8,16 +9,21 @@ import type { GameStateSnapshot, PromotionPiece, SquareId } from '../../chess/ch
  * no chess rules itself, only move intent, selection, and undo history.
  */
 export function useLocalGame() {
-  const gameRef = useRef(new ChessGame());
-  const [snapshot, setSnapshot] = useState<GameStateSnapshot>(() =>
-    gameRef.current.getSnapshot(),
-  );
+  // Lazily constructed on first render only, rather than a fresh (and
+  // immediately discarded) ChessGame on every render.
+  const gameRef = useRef<ChessGame | null>(null);
+  if (gameRef.current === null) {
+    gameRef.current = new ChessGame(readTestSeedFen());
+  }
+  const game = gameRef.current;
+
+  const [snapshot, setSnapshot] = useState<GameStateSnapshot>(() => game.getSnapshot());
   const [selectedSquare, setSelectedSquare] = useState<SquareId | null>(null);
 
   const legalTargets = useMemo(() => {
     if (!selectedSquare) return [];
-    return gameRef.current.legalDestinations(selectedSquare);
-  }, [selectedSquare, snapshot]);
+    return game.legalDestinations(selectedSquare);
+  }, [game, selectedSquare, snapshot]);
 
   const selectSquare = useCallback(
     (square: SquareId) => {
@@ -35,26 +41,35 @@ export function useLocalGame() {
     [selectedSquare, snapshot],
   );
 
-  const move = useCallback((from: SquareId, to: SquareId, promotion?: PromotionPiece) => {
-    const applied = gameRef.current.applyMove({ from, to, promotion });
-    if (applied) {
-      setSnapshot(gameRef.current.getSnapshot());
-    }
-    setSelectedSquare(null);
-  }, []);
+  const move = useCallback(
+    (from: SquareId, to: SquareId, promotion?: PromotionPiece) => {
+      const applied = game.applyMove({ from, to, promotion });
+      if (applied) {
+        setSnapshot(game.getSnapshot());
+      }
+      setSelectedSquare(null);
+    },
+    [game],
+  );
 
   const undo = useCallback(() => {
-    if (gameRef.current.undoLastMove()) {
-      setSnapshot(gameRef.current.getSnapshot());
+    if (game.undoLastMove()) {
+      setSnapshot(game.getSnapshot());
       setSelectedSquare(null);
     }
-  }, []);
+  }, [game]);
 
   const restart = useCallback(() => {
     gameRef.current = new ChessGame();
     setSnapshot(gameRef.current.getSnapshot());
     setSelectedSquare(null);
   }, []);
+
+  /** Whether the source square has a legal move requiring promotion choice. */
+  const requiresPromotion = useCallback(
+    (from: SquareId, to: SquareId) => game.requiresPromotion(from, to),
+    [game],
+  );
 
   return {
     snapshot,
@@ -64,5 +79,6 @@ export function useLocalGame() {
     move,
     undo,
     restart,
+    requiresPromotion,
   };
 }

@@ -11,7 +11,7 @@ describe('PlayLocalScreen', () => {
     expect(screen.getByText(/white to move/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('gridcell', { name: /^e2,/i }));
-    await user.click(screen.getByRole('gridcell', { name: /^e4$/i }));
+    await user.click(screen.getByRole('gridcell', { name: /^e4,/i }));
 
     expect(screen.getByText(/black to move/i)).toBeInTheDocument();
     expect(screen.getByRole('gridcell', { name: /^e4,.*white pawn/i })).toBeInTheDocument();
@@ -33,7 +33,7 @@ describe('PlayLocalScreen', () => {
     render(<PlayLocalScreen onExit={() => {}} />);
 
     await user.click(screen.getByRole('gridcell', { name: /^e2,/i }));
-    await user.click(screen.getByRole('gridcell', { name: /^e4$/i }));
+    await user.click(screen.getByRole('gridcell', { name: /^e4,/i }));
     expect(screen.getByText(/black to move/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /undo/i }));
@@ -41,4 +41,26 @@ describe('PlayLocalScreen', () => {
     expect(screen.getByText(/white to move/i)).toBeInTheDocument();
     expect(screen.getByRole('gridcell', { name: /^e2,.*white pawn/i })).toBeInTheDocument();
   });
+
+  it('shows the winner and blocks the board after checkmate (Fool\'s Mate)', async () => {
+    const user = userEvent.setup();
+    render(<PlayLocalScreen onExit={() => {}} />);
+
+    const moves: Array<[string, string]> = [
+      ['f2', 'f3'],
+      ['e7', 'e5'],
+      ['g2', 'g4'],
+      ['d8', 'h4'],
+    ];
+    for (const [from, to] of moves) {
+      await user.click(screen.getByRole('gridcell', { name: new RegExp(`^${from},`, 'i') }));
+      await user.click(
+        screen.getByRole('gridcell', { name: new RegExp(`^${to}(,|$)`, 'i') }),
+      );
+    }
+
+    expect(screen.getByText(/black wins by checkmate/i)).toBeInTheDocument();
+    expect(screen.getByRole('gridcell', { name: /^e2,/i })).toBeDisabled();
+  });
+
 });

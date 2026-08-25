@@ -23,20 +23,30 @@ quick reference:
   Stockfish, puzzles, or persistence before the current phase is accepted.
 - Run `npm test` and `npm run build` before declaring a phase complete.
 
-## Current architecture (Phase 0 + Phase 1)
+## Current architecture (Phase 0 + Phase 1 + Phase 1.1 stabilisation)
 
 ```text
 src/
   chess/            authoritative domain wrapper around chess.js
+                     (ChessGame, chessTypes, gameResult - outcome model)
   components/board/ presentation-only board (no rules logic)
   features/home/    home screen
   features/play/    local two-player screen + use-case hook
   app/               App shell / routing (in-memory, no router yet)
   styles/            global CSS
-tests/e2e/           Playwright smoke tests
+  testing/           test-only seams (e.g. FEN injection for E2E) - never
+                     read from user-reachable input
+tests/e2e/           Playwright specs (local game, checkmate, promotion)
 ```
 
 No Stockfish, no puzzles, no IndexedDB persistence yet - see next-steps.md.
+Phase 1.1 stabilisation (post-Codex-review hardening) is done: chess.js is
+the sole source of move history (no parallel `appliedMoves` list), promotion
+requirement is determined by `ChessGame.requiresPromotion()` not by the
+board checking ranks, terminal state is an explicit `GameOutcome` model with
+winner/draw-reason, and `applyMove()` differentiates ordinary illegal-move
+rejection from unexpected failures (`ChessGameError`, never silently
+swallowed).
 
 ## Working rules for this repo
 
@@ -49,6 +59,13 @@ No Stockfish, no puzzles, no IndexedDB persistence yet - see next-steps.md.
   current.
 - This repo has no CI configured yet; run tests/build locally before calling
   work done.
+- Deployment base path is a single env var, `VITE_BASE_PATH` (see
+  `vite.config.ts` and README.md) - it drives both Vite's `base` and the PWA
+  manifest's `start_url`/`scope`. Do not hardcode `/` elsewhere for paths.
+- `npm run test:e2e` runs `npm run build` then `playwright test` as two
+  separate steps deliberately (not chained with `&&` inside Playwright's
+  `webServer.command`) - see the comment in `playwright.config.ts` for why
+  that chaining caused an orphaned process hang on Windows.
 
 ## Handoff docs
 
