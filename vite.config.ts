@@ -17,12 +17,24 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // Auto-activates a new service worker on the next load instead of
-      // prompting, so this scaffold makes no promise of update UX that
-      // does not exist yet. Full update-prompt UX is Phase 6 (PWA
-      // hardening) per the build spec, not this stabilisation pass.
-      registerType: 'autoUpdate',
-      includeAssets: ['icons/*.svg'],
+      // 'prompt' (not 'autoUpdate') is the deliberate choice here: with
+      // 'autoUpdate', vite-plugin-pwa compiles self.skipWaiting() +
+      // clientsClaim() into the generated service worker, which lets a
+      // newly deployed version seize every open tab immediately - including
+      // one with a chess game in progress. 'prompt' leaves those unset, so
+      // a new service worker installs and waits (standard Workbox
+      // behaviour) until the page is next fully reloaded, and never
+      // interrupts an active session. This intentionally does not add a
+      // "new version available" prompt UI yet - that belongs to Phase 6
+      // (PWA/offline hardening) per the build spec - it only fixes the
+      // unsafe activation policy with the smallest possible change.
+      registerType: 'prompt',
+      // No `includeAssets` here, and `includeManifestIcons` turned off:
+      // `workbox.globPatterns` below already matches `icons/icon.svg` in the
+      // built output, so vite-plugin-pwa separately re-adding the same path
+      // from `manifest.icons` (its default behaviour) produced a duplicate
+      // precache entry for that one file in the generated service worker.
+      includeManifestIcons: false,
       manifest: {
         name: 'Pocket Chess',
         short_name: 'Chess',

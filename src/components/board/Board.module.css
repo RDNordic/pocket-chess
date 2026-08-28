@@ -10,6 +10,14 @@
   touch-action: manipulation;
 }
 
+/* Row wrapper exists only for ARIA grid semantics (role="row" grouping the
+   8 gridcells of one rank) - `display: contents` removes it from the CSS
+   grid's own box layout, so `.board`'s 8x8 grid-template still applies
+   directly to the `.square` buttons as if the wrapper weren't there. */
+.row {
+  display: contents;
+}
+
 .square {
   position: relative;
   display: flex;

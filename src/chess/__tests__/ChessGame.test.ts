@@ -2,6 +2,7 @@ import { Chess } from 'chess.js';
 import type { Square } from 'chess.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChessGame, ChessGameError } from '../ChessGame';
+import type { SquareId } from '../chessTypes';
 
 describe('ChessGame', () => {
   afterEach(() => {
@@ -273,6 +274,28 @@ describe('ChessGame', () => {
     expect(game.applyUciMove('e2')).toBeNull();
   });
 
+  describe('UCI casing contract', () => {
+    it('rejects uppercase UCI strings - the contract is lowercase-only', () => {
+      const game = new ChessGame();
+      expect(game.applyUciMove('E2E4')).toBeNull();
+      expect(game.applyUciMove('e2E4')).toBeNull();
+      expect(game.applyUciMove('E2e4')).toBeNull();
+    });
+
+    it('rejects an uppercase promotion letter even with an otherwise valid move', () => {
+      const game = new ChessGame('7k/4P3/8/8/8/8/8/K7 w - - 0 1');
+      expect(game.applyUciMove('e7e8Q')).toBeNull();
+      // The lowercase form of the same move must still succeed, confirming
+      // the rejection above is specifically about casing, not the move.
+      expect(game.applyUciMove('e7e8q')).not.toBeNull();
+    });
+
+    it('accepts lowercase UCI strings, matching the real UCI protocol', () => {
+      const game = new ChessGame();
+      expect(game.applyUciMove('e2e4')).not.toBeNull();
+    });
+  });
+
   it('reports legal destinations for a selected square', () => {
     const game = new ChessGame();
     expect(game.legalDestinations('e2').sort()).toEqual(['e3', 'e4']);
@@ -284,6 +307,18 @@ describe('ChessGame', () => {
       expect(game.applyMove({ from: 'e2', to: 'e5' })).toBeNull();
     });
 
+    it('rejects a promotion move made without a promotion piece, without calling chess.js', () => {
+      // The legality pre-check must catch this itself: chess.js's verbose
+      // move list for e7-e8 only contains entries with a promotion piece
+      // set, so an unqualified request should never reach chess.js's own
+      // move() at all.
+      const moveSpy = vi.spyOn(Chess.prototype, 'move');
+      const game = new ChessGame('7k/4P3/8/8/8/8/8/K7 w - - 0 1');
+
+      expect(game.applyMove({ from: 'e7', to: 'e8' })).toBeNull();
+      expect(moveSpy).not.toHaveBeenCalled();
+    });
+
     it('does not swallow an unexpected chess.js failure as an illegal move', () => {
       vi.spyOn(Chess.prototype, 'move').mockImplementationOnce(() => {
         throw new Error('unexpected internal failure');
@@ -291,6 +326,71 @@ describe('ChessGame', () => {
 
       const game = new ChessGame();
       expect(() => game.applyMove({ from: 'e2', to: 'e4' })).toThrow(ChessGameError);
+    });
+
+    it('sets a stable error name on ChessGameError', () => {
+      const error = new ChessGameError('example');
+      expect(error.name).toBe('ChessGameError');
+    });
+
+    describe('malformed runtime source squares', () => {
+      // TypeScript callers cannot pass these - `SquareId` rules them out at
+      // compile time - but a future engine/puzzle/PGN-import source is not
+      // guaranteed to satisfy that type at runtime, and chess.js's own
+      // `moves({ square })` treats a falsy square as "no filter" (returns
+      // every legal move in the position) rather than rejecting it. `as
+      // unknown as SquareId` simulates exactly that: data that type-checks
+      // as a SquareId but was never actually validated.
+      it('rejects an empty-string source without calling chess.js move()', () => {
+        const moveSpy = vi.spyOn(Chess.prototype, 'move');
+        const game = new ChessGame();
+
+        // 'a3' is a real legal destination (for a2-a3) in the starting
+        // position, so this specifically exercises the failure mode where
+        // an unvalidated empty `from` could spuriously match an unrelated
+        // piece's legal destination.
+        const result = game.applyMove({ from: '' as unknown as SquareId, to: 'a3' });
+
+        expect(result).toBeNull();
+        expect(moveSpy).not.toHaveBeenCalled();
+        expect(game.turn).toBe('white');
+      });
+
+      it('rejects a null/undefined source without throwing', () => {
+        const game = new ChessGame();
+        expect(game.applyMove({ from: null as unknown as SquareId, to: 'e4' })).toBeNull();
+        expect(game.applyMove({ from: undefined as unknown as SquareId, to: 'e4' })).toBeNull();
+      });
+
+      it('rejects a syntactically invalid source string', () => {
+        const game = new ChessGame();
+        expect(game.applyMove({ from: 'z9' as unknown as SquareId, to: 'e4' })).toBeNull();
+        expect(game.applyMove({ from: 'not-a-square' as unknown as SquareId, to: 'e4' })).toBeNull();
+      });
+
+      it('rejects an empty-string destination', () => {
+        const game = new ChessGame();
+        expect(game.applyMove({ from: 'e2', to: '' as unknown as SquareId })).toBeNull();
+      });
+    });
+  });
+
+  describe('legalDestinations', () => {
+    it('returns one entry per destination square, not one per promotion piece', () => {
+      const game = new ChessGame('7k/4P3/8/8/8/8/8/K7 w - - 0 1');
+      expect(game.legalDestinations('e7')).toEqual(['e8']);
+    });
+
+    it('returns no destinations for a malformed source instead of every legal move', () => {
+      const game = new ChessGame();
+      expect(game.legalDestinations('' as unknown as SquareId)).toEqual([]);
+    });
+  });
+
+  describe('requiresPromotion', () => {
+    it('returns false for a malformed source instead of throwing or matching everything', () => {
+      const game = new ChessGame('7k/4P3/8/8/8/8/8/K7 w - - 0 1');
+      expect(game.requiresPromotion('' as unknown as SquareId, 'e8')).toBe(false);
     });
   });
 });

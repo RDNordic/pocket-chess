@@ -46,6 +46,18 @@ export function Board({
   const promotionOriginRef = useRef<HTMLButtonElement | null>(null);
 
   const squares = useMemo(() => orderedSquares(orientation), [orientation]);
+  // orderedSquares() returns squares in row-major (rank-by-rank) order, so
+  // every consecutive run of 8 is exactly one visual rank - chunking it here
+  // gives each rank a role="row" wrapper for proper ARIA grid semantics
+  // (role="grid" > role="row" > role="gridcell"), without changing the
+  // underlying square order that selection/highlighting logic relies on.
+  const squareRows = useMemo(() => {
+    const rows: SquareId[][] = [];
+    for (let i = 0; i < squares.length; i += 8) {
+      rows.push(squares.slice(i, i + 8));
+    }
+    return rows;
+  }, [squares]);
   const pieceBySquare = useMemo(() => {
     const map = new Map<string, GameStateSnapshot['pieces'][number]>();
     for (const piece of snapshot.pieces) {
@@ -96,54 +108,58 @@ export function Board({
 
   return (
     <div className={styles.board} role="grid" aria-label="Chess board">
-      {squares.map((square) => {
-        const piece = pieceBySquare.get(square);
-        const isSelected = square === selectedSquare;
-        const isLegalTarget = legalTargets.includes(square);
-        const isLastMove =
-          snapshot.lastMove &&
-          (square === snapshot.lastMove.from || square === snapshot.lastMove.to);
-        const isCheckSquare = square === kingSquareInCheck;
+      {squareRows.map((row, rowIndex) => (
+        <div role="row" className={styles.row} key={rowIndex}>
+          {row.map((square) => {
+            const piece = pieceBySquare.get(square);
+            const isSelected = square === selectedSquare;
+            const isLegalTarget = legalTargets.includes(square);
+            const isLastMove =
+              snapshot.lastMove &&
+              (square === snapshot.lastMove.from || square === snapshot.lastMove.to);
+            const isCheckSquare = square === kingSquareInCheck;
 
-        const classNames = [
-          styles.square,
-          isLightSquare(square) ? styles.light : styles.dark,
-          isSelected ? styles.selected : '',
-          !isSelected && isLastMove ? styles.lastMove : '',
-          isCheckSquare ? styles.check : '',
-          isLegalTarget && !piece ? styles.legalTarget : '',
-          isLegalTarget && piece ? styles.legalCapture : '',
-        ]
-          .filter(Boolean)
-          .join(' ');
+            const classNames = [
+              styles.square,
+              isLightSquare(square) ? styles.light : styles.dark,
+              isSelected ? styles.selected : '',
+              !isSelected && isLastMove ? styles.lastMove : '',
+              isCheckSquare ? styles.check : '',
+              isLegalTarget && !piece ? styles.legalTarget : '',
+              isLegalTarget && piece ? styles.legalCapture : '',
+            ]
+              .filter(Boolean)
+              .join(' ');
 
-        const description = [
-          piece ? pieceAccessibleName(piece.type, piece.colour) : undefined,
-          isLegalTarget ? 'legal move target' : undefined,
-          isCheckSquare ? 'king in check' : undefined,
-        ]
-          .filter(Boolean)
-          .join(', ');
+            const description = [
+              piece ? pieceAccessibleName(piece.type, piece.colour) : undefined,
+              isLegalTarget ? 'legal move target' : undefined,
+              isCheckSquare ? 'king in check' : undefined,
+            ]
+              .filter(Boolean)
+              .join(', ');
 
-        return (
-          <button
-            key={square}
-            type="button"
-            role="gridcell"
-            className={classNames}
-            disabled={boardInteractionDisabled}
-            aria-selected={isSelected}
-            aria-label={description ? `${square}, ${description}` : square}
-            onClick={(event) => handleSquareClick(square, event.currentTarget)}
-          >
-            {piece && (
-              <span className={styles.piece} data-colour={piece.colour} aria-hidden="true">
-                {pieceGlyph(piece.type, piece.colour)}
-              </span>
-            )}
-          </button>
-        );
-      })}
+            return (
+              <button
+                key={square}
+                type="button"
+                role="gridcell"
+                className={classNames}
+                disabled={boardInteractionDisabled}
+                aria-selected={isSelected}
+                aria-label={description ? `${square}, ${description}` : square}
+                onClick={(event) => handleSquareClick(square, event.currentTarget)}
+              >
+                {piece && (
+                  <span className={styles.piece} data-colour={piece.colour} aria-hidden="true">
+                    {pieceGlyph(piece.type, piece.colour)}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      ))}
 
       {pendingPromotion && (
         <PromotionDialog

@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ChessGame } from '../../chess/ChessGame';
 import type { GameStateSnapshot, PromotionPiece, SquareId } from '../../chess/chessTypes';
-import { readTestSeedFen } from '../../testing/testFenSeam';
 
 /**
  * Coordinates a local two-humans-one-device game against the authoritative
@@ -13,7 +12,7 @@ export function useLocalGame() {
   // immediately discarded) ChessGame on every render.
   const gameRef = useRef<ChessGame | null>(null);
   if (gameRef.current === null) {
-    gameRef.current = new ChessGame(readTestSeedFen());
+    gameRef.current = new ChessGame();
   }
   const game = gameRef.current;
 
