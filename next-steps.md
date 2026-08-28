@@ -1,12 +1,29 @@
 # Next steps
 
-Phase 0 (scaffold), Phase 1 (deterministic local two-player chess), and the
-Phase 1.1 stabilisation pass (independent Codex review fixes: architecture,
-tests, accessibility, licensing, PWA base-path, E2E) are done - see
-session-handoff.md for details. This file tracks concrete, actionable next
-work; update it as items are completed or superseded.
+Phase 0 (scaffold), Phase 1 (deterministic local two-player chess), the
+Phase 1.1 stabilisation pass, the Phase 1.2 cleanup + first Cloudflare
+deployment experiment, and the Phase 1.3 final cleanup are done - see
+session-handoff.md for details. Phase 1 is complete and ready for sign-off.
+This file tracks concrete, actionable next work; update it as items are
+completed or superseded.
 
-## Phase 2: Stockfish integration (next)
+## Optional, independent: live Cloudflare deployment (one manual step)
+
+Not a gate for anything else in this list. The app already builds, passes
+all tests, and validates locally via `npm run cf:dry-run` without this -
+live deployment is a separate, optional action whenever it's wanted, not a
+prerequisite for Phase 2 or any other phase.
+
+- [ ] Run `npx wrangler login` (interactive - needs a real browser/user,
+      cannot be done from an automated session).
+- [ ] Run `npm run cf:deploy`.
+- [ ] Smoke-test the resulting `https://pocket-chess.<account>.workers.dev`
+      URL: page loads, board renders, a local two-player move works,
+      promotion works, refreshing a non-root path doesn't 404, no console
+      errors beyond the known service-worker sandbox-only caveat noted in
+      session-handoff.md.
+
+## Phase 2: Stockfish integration
 
 Reference: pocket-chess-build-spec.md sections 5, 11, 12, 13.
 

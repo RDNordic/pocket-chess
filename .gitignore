@@ -1,6 +1,7 @@
 node_modules
 dist
 dist-ssr
+public/legal
 *.local
 *.tsbuildinfo
 .vite
@@ -9,3 +10,14 @@ playwright-report
 coverage
 .DS_Store
 *.log
+.wrangler
+.wrangler-workspace
+.dev.vars
+.env
+.env.*
+!.env.example
+
+# Local, chronological session-by-session working log. Useful for
+# continuing work locally (see AGENTS.md's Handoff docs section); too
+# noisy/verbose for the public repository. Untracked as of Phase 1 close.
+session-handoff.md

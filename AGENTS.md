@@ -23,7 +23,7 @@ quick reference:
   Stockfish, puzzles, or persistence before the current phase is accepted.
 - Run `npm test` and `npm run build` before declaring a phase complete.
 
-## Current architecture (Phase 0 + Phase 1 + Phase 1.1 stabilisation)
+## Current architecture (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + release hygiene)
 
 ```text
 src/
@@ -32,11 +32,20 @@ src/
   components/board/ presentation-only board (no rules logic)
   features/home/    home screen
   features/play/    local two-player screen + use-case hook
+  features/about/   About/Licences/Privacy screen (static content only)
   app/               App shell / routing (in-memory, no router yet)
   styles/            global CSS
-  testing/           test-only seams (e.g. FEN injection for E2E) - never
-                     read from user-reachable input
-tests/e2e/           Playwright specs (local game, checkmate, promotion)
+tests/e2e/           Playwright specs (local game, checkmate, promotion) -
+                     all drive the real UI; there is no test-only runtime
+                     seam of any kind (one existed for FEN injection and was
+                     deliberately removed in Phase 1.2 - see
+                     session-handoff.md).
+wrangler.jsonc       Cloudflare Workers Static Assets config (assets-only,
+                     no Worker script) - see README.md's Cloudflare section.
+scripts/wrangler-workspace.mjs  workspace-scoped Wrangler wrapper used by
+                     `cf:dev`/`cf:dry-run` - see the Cloudflare bullet below.
+LICENSE              GPL-3.0-or-later (full text; project notice at the top).
+LICENSES/            third-party notices for distributed runtime code.
 ```
 
 No Stockfish, no puzzles, no IndexedDB persistence yet - see next-steps.md.
@@ -44,9 +53,42 @@ Phase 1.1 stabilisation (post-Codex-review hardening) is done: chess.js is
 the sole source of move history (no parallel `appliedMoves` list), promotion
 requirement is determined by `ChessGame.requiresPromotion()` not by the
 board checking ranks, terminal state is an explicit `GameOutcome` model with
-winner/draw-reason, and `applyMove()` differentiates ordinary illegal-move
-rejection from unexpected failures (`ChessGameError`, never silently
-swallowed).
+winner/draw-reason.
+Phase 1.2 (second Codex review fixes + first Cloudflare deployment) is also
+done: `applyMove()` checks legality against chess.js's own verbose move list
+*before* calling `move()` (never by matching its error-message text), so any
+exception `move()` still throws is unambiguously wrapped in
+`ChessGameError` rather than distinguished by wording; the service worker
+uses `registerType: 'prompt'` so a new deployment cannot seize an
+in-progress game (`skipWaiting`/`clientsClaim` are not force-enabled); and
+the app is deployable to Cloudflare Workers Static Assets via
+`npm run cf:deploy` (see session-handoff.md for full detail, including why
+the actual `*.workers.dev` deployment is not yet live - it needs one
+interactive `wrangler login`).
+Phase 1.3 (final cleanup) is also done: `applyMove`/`legalDestinations`/
+`requiresPromotion` all validate square-shaped input before ever calling
+chess.js's `moves({ square })` (which treats a falsy/malformed square as
+"no filter" and returns every legal move, not an error - a landmine for
+future non-TypeScript-checked runtime data from an engine/puzzle/PGN
+source); `wrangler.jsonc` sets `send_metrics: false` and
+`dependencies_instrumentation.enabled: false` at the repo level instead of
+relying on a machine-level `wrangler telemetry disable`; `npm run
+cf:dry-run` runs fully workspace-scoped (see
+`scripts/wrangler-workspace.mjs`) so it never writes to the user's OS
+profile; and the real (not merely suspected) cause of the intermittent
+E2E failure was found and fixed - see the E2E note below.
+A public-release hygiene pass is also done: top-level `LICENSE`
+(GPL-3.0-or-later); `.gitignore` hardened for `.env`/`.env.*`;
+`ChessGame.applyUciMove()`'s contract made explicitly lowercase-only
+(matches the real UCI protocol, and was previously inconsistent with
+`applyMove()`'s own lowercase-only `isSquareId()` check); the Wrangler
+wrapper script (renamed to `scripts/wrangler-workspace.mjs`) hardened to
+run Wrangler's own bin entry point directly with no shell and no `npx`;
+a small in-app About/Licences/Privacy screen
+(`src/features/about/AboutScreen.tsx`); `engines.node: ">=22.0.0"` in
+`package.json` (Wrangler's own stated minimum); and Scheduler (a
+transitive React DOM dependency, confirmed present in the built bundle)
+added to `LICENSES/THIRD-PARTY-NOTICES.md`.
 
 ## Working rules for this repo
 
@@ -66,8 +108,29 @@ swallowed).
   separate steps deliberately (not chained with `&&` inside Playwright's
   `webServer.command`) - see the comment in `playwright.config.ts` for why
   that chaining caused an orphaned process hang on Windows.
+  `webServer.reuseExistingServer` is hardcoded `false` (not
+  `!process.env.CI`) - a locally-reused server could still be mid-teardown
+  from the previous run and would then silently serve a stale build with
+  mismatched asset hashes rather than the one `test:e2e` just built; this
+  was caught in the Phase 1.3 session as a real, reproducible failure (all
+  3 specs timing out waiting for a button that never rendered), not a
+  hang - 1 failure out of 29 total `test:e2e` runs across the Phase
+  1.2/1.3 sessions, and the one failure was with the old config, before
+  this fix. 13 further runs after the fix (including tight back-to-back
+  loops with zero delay, specifically to re-trigger the race) were all
+  clean - see session-handoff.md.
+- Cloudflare (`wrangler.jsonc`, `npm run cf:dev` / `cf:deploy`) is a pure
+  static-asset delivery layer for the existing `dist/` build - it must never
+  gain a Worker-side backend, database binding, or server-side chess logic.
+  Do not add D1/KV/R2/Durable Objects/Analytics Engine/Cloudflare AI unless
+  a later, explicit product decision changes the privacy architecture.
 
 ## Handoff docs
 
-- session-handoff.md - state of the most recent working session.
+- session-handoff.md - state of the most recent working session. This file
+  is intentionally **not tracked in the public repository** (local-only,
+  gitignored) as of the Phase 1 close-out - it's a detailed, chronological
+  session-by-session log useful for continuing work locally, but noisy for
+  a public audience. Keep maintaining it locally per CLAUDE.md's workflow;
+  it just isn't committed going forward.
 - next-steps.md - concrete next actions, updated as work progresses.

@@ -79,6 +79,121 @@ SOFTWARE.
 
 ---
 
+## Scheduler
+
+- Version distributed: 0.27.0 (confirm against `package-lock.json` at each
+  release; this is a transitive dependency of React DOM, not a direct
+  dependency of this project).
+- Licence: MIT.
+- Source: https://github.com/facebook/react (part of the React monorepo).
+- Role: task-scheduling primitives used internally by React DOM. Confirmed
+  actually present in `dist/` (not merely installed) by checking the built
+  bundle for its distinctive exported names
+  (`unstable_scheduleCallback`, `unstable_ImmediatePriority`).
+
+```
+MIT License
+
+Copyright (c) Meta Platforms, Inc. and affiliates.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
+## Workbox
+
+- Version distributed: 7.4.1 (confirm against `package-lock.json` at each
+  release; this is pulled in transitively by `vite-plugin-pwa`, which pins
+  `workbox-build`/`workbox-window` to `^7.4.1`).
+- Licence: MIT.
+- Source: https://github.com/GoogleChrome/workbox
+- Role: the generated service worker (`dist/sw.js` and
+  `dist/workbox-*.js`) is Workbox's own precaching/routing runtime, compiled
+  in by `vite-plugin-pwa` at build time - this is runtime code shipped to
+  every visitor's browser, not just build tooling, so it belongs here rather
+  than only in `package.json`.
+
+```
+Copyright 2018 Google LLC
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```
+
+---
+
+## vite-plugin-pwa
+
+- Version distributed: 1.3.0 (confirm against `package-lock.json` at each
+  release).
+- Licence: MIT.
+- Source: https://github.com/vite-pwa/vite-plugin-pwa
+- Role: `dist/registerSW.js` is not original code written for this project -
+  it is generated at build time from one of vite-plugin-pwa's own source
+  templates (`client/build/register.js` in the installed package), copied
+  into the production output essentially verbatim. That makes it shipped
+  third-party code, not merely build-time tooling, the same reasoning that
+  already applies to Workbox above (which vite-plugin-pwa also compiles
+  into `dist/sw.js`/`dist/workbox-*.js` at build time).
+
+```
+MIT License
+
+Copyright (c) 2020-PRESENT Anthony Fu <https://github.com/antfu>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
 ## Piece artwork
 
 Standard Unicode chess symbols (U+2654-U+265F), rendered as text glyphs in

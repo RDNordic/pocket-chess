@@ -24,6 +24,30 @@ rules" (section 49) as binding.
 - Stockfish must run in a Web Worker, never on the main thread, once added.
 - Work one phase at a time per the build spec's phase list; do not
   pre-implement later phases.
+- No test-only runtime seam reachable via a browser global/URL/query string
+  may exist in the app (one existed for FEN injection and was removed in
+  Phase 1.2 - reach test positions via real move sequences instead).
+- Cloudflare (`wrangler.jsonc`) is a static-asset host only - no Worker
+  backend, database binding, or server-side chess logic. See README.md's
+  Cloudflare section for the `cf:dev`/`cf:deploy`/`cf:dry-run` scripts.
+  Privacy settings (`send_metrics`, `dependencies_instrumentation`) are
+  repository-scoped in `wrangler.jsonc`, not a machine-level setting.
+- Any square/move value entering `src/chess/ChessGame.ts` from outside a
+  TypeScript-checked call site (future engine/puzzle/PGN input) must be
+  validated as a real square shape before being handed to chess.js's
+  `moves({ square })` - it silently treats a falsy/malformed square as "no
+  filter" rather than erroring.
+- `ChessGame.applyUciMove()`'s input contract is lowercase-only (matches
+  the real UCI protocol) - do not reintroduce case-insensitive matching
+  there.
+- The project is licensed GPL-3.0-or-later (`LICENSE` at repo root); the
+  in-app About screen (`src/features/about/AboutScreen.tsx`) and
+  `LICENSES/THIRD-PARTY-NOTICES.md` must stay in sync with whatever
+  runtime dependencies are actually bundled into `dist/`.
+- `scripts/wrangler-workspace.mjs` (used by `cf:dev`/`cf:dry-run`) invokes
+  Wrangler's own bin entry point directly with `shell: false` and no
+  `npx` - do not reintroduce a shell or `npx` there without a concrete
+  reason.
 
 ## Before finishing any change
 

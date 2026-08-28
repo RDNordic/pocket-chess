@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Deployment name -> the initial public URL is
+  // https://pocket-chess.<account>.workers.dev (see README.md's Cloudflare
+  // section). No custom domain is configured yet - that is a later,
+  // separate, manual step per the current phase's scope.
+  "name": "pocket-chess",
+  "compatibility_date": "2026-08-25",
+  // Repository-scoped privacy settings, verified against the installed
+  // Wrangler's own config schema (node_modules/wrangler/config-schema.json)
+  // rather than assumed - so anyone who clones this repo gets the same
+  // posture without needing a machine-level `wrangler telemetry disable`.
+  // These are two independent settings, not one: per Wrangler's own schema
+  // description, `dependencies_instrumentation` is build metadata "managed
+  // separately from the telemetry one" and is NOT disabled by
+  // `send_metrics: false` alone, so both must be set explicitly.
+  "send_metrics": false,
+  "dependencies_instrumentation": {
+    "enabled": false
+  },
+  "assets": {
+    // Serves the existing `npm run build` output as-is. There is no Worker
+    // script (no `main` field) - this app has no backend, so nothing here
+    // should invent one. Cloudflare's Static Assets feature supports a
+    // pure assets-only deployment with no Worker code at all.
+    "directory": "./dist",
+    // Pocket Chess is a client-side single-page app with in-memory routing
+    // (see src/app/App.tsx). Without this, refreshing on anything but the
+    // exact root path would 404 instead of re-serving index.html.
+    "not_found_handling": "single-page-application"
+  }
+}

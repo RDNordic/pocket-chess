@@ -2,9 +2,10 @@ import styles from './HomeScreen.module.css';
 
 interface HomeScreenProps {
   onPlayLocal: () => void;
+  onAbout: () => void;
 }
 
-export function HomeScreen({ onPlayLocal }: HomeScreenProps) {
+export function HomeScreen({ onPlayLocal, onAbout }: HomeScreenProps) {
   return (
     <div className={styles.screen}>
       <h1 className={styles.title}>Pocket Chess</h1>
@@ -16,6 +17,9 @@ export function HomeScreen({ onPlayLocal }: HomeScreenProps) {
         </button>
         <button type="button" className={styles.secondaryAction} disabled>
           Puzzles (coming soon)
+        </button>
+        <button type="button" className={styles.secondaryAction} onClick={onAbout}>
+          About / Licences / Privacy
         </button>
       </div>
     </div>
