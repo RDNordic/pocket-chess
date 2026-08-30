@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Pocket Chess - engine integration test harness</title>
+  </head>
+  <body>
+    <!--
+      Not part of the application: this page is never referenced by
+      index.html/src/, is not a Vite build entry (see vite.config.ts -
+      only index.html is configured as an entry), and is never included in
+      `npm run build`'s dist/ output. It exists purely so the real engine
+      integration test (tests/engine-integration/engine.spec.ts) can drive
+      the actual StockfishAdapter class against a real Worker/WASM runtime
+      in a real browser - something Vitest's jsdom environment cannot do
+      (jsdom has no Worker implementation). Served only by this test's own
+      Vite dev server (see playwright.engine.config.ts), never by the
+      app's own preview/production server.
+    -->
+    <script type="module" src="./engine-harness.ts"></script>
+  </body>
+</html>

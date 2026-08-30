@@ -69,6 +69,13 @@ export function AboutScreen({ onExit }: AboutScreenProps) {
             the offline/installable app (service worker) runtime and the
             build-time code that generates it.
           </li>
+          <li>
+            <strong>Stockfish</strong> (GPLv3, via the nmrugg/stockfish.js
+            v18.0.0 lite single-threaded build) - the chess engine, run in a
+            Web Worker. Unmodified from upstream; see the third-party
+            notices for the exact source pointer. Not yet wired into any
+            user-facing feature.
+          </li>
         </ul>
         <p>
           <a href={thirdPartyNoticesHref} target="_blank" rel="noopener noreferrer">
