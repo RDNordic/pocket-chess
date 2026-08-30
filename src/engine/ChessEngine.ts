@@ -16,7 +16,9 @@ export interface ChessEngine {
   /**
    * Starts the engine Worker and performs the full UCI handshake (`uci` ->
    * `uciok`, then `isready` -> `readyok`). Resolves once the engine is
-   * `ready`. Can only be called once, from `uninitialised`.
+   * `ready`. Can only be called once, from `uninitialised`. Rejects and
+   * moves to `error` if the engine never responds (see
+   * `StockfishAdapter`'s handshake timeout) - it never hangs forever.
    */
   start(): Promise<void>;
 
@@ -24,6 +26,10 @@ export interface ChessEngine {
    * Sends `isready` and resolves on `readyok`. Safe to call at any point
    * after `start()` has resolved (including while a search is in flight,
    * per the UCI protocol), to confirm the engine is still responsive.
+   * Bounded by the same handshake timeout as `start()`. Concurrent calls
+   * share one in-flight request rather than each issuing their own
+   * `isready`, so none of them can be left pending forever by a later call
+   * overwriting an earlier one.
    */
   waitUntilReady(): Promise<void>;
 

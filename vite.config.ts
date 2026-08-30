@@ -53,10 +53,22 @@ export default defineConfig({
           },
         ],
       },
-      // Phase 0/1 scaffold: no engine or puzzle assets exist yet, so the
-      // runtime cache list stays minimal until Phase 6 (PWA hardening).
+      // `wasm` added in Phase 2A so the vendored Stockfish engine
+      // (public/engine/stockfish-18-lite-single.{js,wasm}) precaches for
+      // offline "Play computer" use once that's wired up, matching this
+      // app's offline-first requirement - `js` alone already matched the
+      // engine's small bootstrap script, but not its ~7MB .wasm binary.
+      // `maximumFileSizeToCacheInBytes` also has to be raised: Workbox's
+      // own default is 2 MiB (workbox-build's GetManifestOptions), and the
+      // vendored .wasm is ~7MB - past that default it would be silently
+      // *skipped* from the precache manifest (a build warning, not an
+      // error) even after being added to globPatterns above. 8 MiB gives
+      // the current ~7MB file some headroom; re-check this if the vendored
+      // engine build is ever upgraded to something meaningfully larger.
+      // Full puzzle-dataset caching is still Phase 5/6 work, not this one.
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg}'],
+        globPatterns: ['**/*.{js,css,html,svg,wasm}'],
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
       },
     }),
   ],

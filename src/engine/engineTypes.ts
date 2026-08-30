@@ -20,8 +20,25 @@ export type EngineLifecycleState =
  * modelled here yet.
  */
 export interface SearchLimits {
-  /** Search time budget in milliseconds. */
+  /** Search time budget in milliseconds. Must be a positive integer - see
+   * `assertValidSearchLimits`, which every `findBestMove` call runs this
+   * through before it can generate any UCI. */
   movetimeMs: number;
+}
+
+/**
+ * Throws `EngineError` unless `limits` is safe to turn into UCI (`go
+ * movetime <ms>`). Rejects `NaN`, `Infinity`/`-Infinity`, non-integers, and
+ * zero/negative values - any of those would either produce malformed UCI or
+ * a degenerate (instant/never-ending) search.
+ */
+export function assertValidSearchLimits(limits: SearchLimits): void {
+  const { movetimeMs } = limits;
+  if (!Number.isInteger(movetimeMs) || movetimeMs < 1) {
+    throw new EngineError(
+      `invalid search limits: movetimeMs must be a positive integer number of milliseconds, got ${movetimeMs}`,
+    );
+  }
 }
 
 /**

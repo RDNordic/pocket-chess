@@ -233,18 +233,30 @@ applies. No third-party image or font assets are bundled for pieces.
 - Modifications: **none**. These two files are the exact, unmodified bytes
   of the upstream `v18.0.0` release assets (see checksums above) - Pocket
   Chess does not patch, recompile, or otherwise alter Stockfish.
-- Corresponding source availability: because these are unmodified upstream
-  release artefacts (not a Pocket-Chess-specific build), and this project
-  does not distribute them for a fee, GPLv3 section 6(d) is satisfied by
-  offering equivalent network access to the Corresponding Source through
-  the same kind of place, at no charge: the exact commit/tag pointer above
-  (https://github.com/nmrugg/stockfish.js/releases/tag/v18.0.0, itself
-  referencing official-stockfish/Stockfish@cb3d4ee9) is a durable public
-  location providing that source, maintained by the upstream project
-  independently of this repository. If that upstream location ever becomes
-  unavailable, the recorded commit hashes above are sufficient to locate or
-  reconstruct equivalent source from `official-stockfish/Stockfish` and
-  `nmrugg/stockfish.js`.
+- Corresponding source availability: these are unmodified upstream release
+  artefacts, not a Pocket-Chess-specific build, so rather than bundling the
+  C++ source itself, Pocket Chess relies on GPLv3 section 6(d) - conveying
+  the object code by offering access from a designated place, with
+  equivalent access to the Corresponding Source offered through the same
+  kind of place, at no further charge. The designated place is the exact
+  upstream release, https://github.com/nmrugg/stockfish.js/releases/tag/v18.0.0,
+  whose own description points to the underlying Stockfish source at
+  `official-stockfish/Stockfish@cb3d4ee9b47d0c5aae855b12379378ea1439675c`.
+  As of this writing that source is presently available at both locations.
+  Relying on 6(d) is Pocket Chess's own **ongoing** responsibility, not a
+  condition satisfied once and then forgotten merely because the pointer
+  above is currently valid: it requires that the Corresponding Source
+  remain actually available through that place for as long as Pocket Chess
+  keeps distributing this binary and for the period 6(d) otherwise
+  requires. If the upstream release or repository ever becomes unavailable,
+  Pocket Chess would need to either restore equivalent access (e.g. a
+  mirror or archived copy) or vendor the Corresponding Source directly to
+  remain compliant - this has not been necessary to date, but is not
+  something the checksums above can substitute for. The checksums verify
+  only that the *binary* bytes vendored into `public/engine/` match a
+  specific, identified build of the object code; they are an integrity/
+  provenance record for what was vendored, not a mechanism for locating,
+  verifying, or reconstructing source that has become unavailable.
 - Role: chess engine used to compute candidate moves, run inside a Web
   Worker via `src/engine/StockfishAdapter.ts`. Stockfish is never
   authoritative for legality/turn/check/checkmate/draw/history - every move
