@@ -55,12 +55,22 @@ const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
  * detecting a genuinely wedged engine. */
 const DEFAULT_STOP_TIMEOUT_MS = 5_000;
 
+/** Fixed overhead added on top of a search's own `movetimeMs` before its
+ * watchdog gives up on it. `movetimeMs` is UCI input, not a runtime
+ * guarantee - a wedged Worker might never call back at all - so every
+ * ordinary search is bounded independently of whether Stockfish honours
+ * it. 5s comfortably covers WASM/message-passing scheduling jitter and a
+ * healthy engine's own small overshoot past the requested budget. */
+const DEFAULT_SEARCH_WATCHDOG_OVERHEAD_MS = 5_000;
+
 export interface StockfishAdapterOptions {
   workerFactory?: () => EngineWorkerLike;
   /** Overrides `DEFAULT_HANDSHAKE_TIMEOUT_MS`. Exposed for tests. */
   handshakeTimeoutMs?: number;
   /** Overrides `DEFAULT_STOP_TIMEOUT_MS`. Exposed for tests. */
   stopTimeoutMs?: number;
+  /** Overrides `DEFAULT_SEARCH_WATCHDOG_OVERHEAD_MS`. Exposed for tests. */
+  searchWatchdogOverheadMs?: number;
 }
 
 interface PendingHandshake {
@@ -94,36 +104,66 @@ interface PendingSearch {
  * and every earlier one was already rejected synchronously when it was
  * superseded.
  *
- * Bounded waits: `uciok`/`readyok` are each bounded by `handshakeTimeoutMs`
- * (timing out moves the adapter to `error` and rejects the caller). A
- * search's own `bestmove` is bounded by its own `movetimeMs` (a healthy
- * engine honours that itself - see engineTypes.assertValidSearchLimits).
- * The one wait with no caller-supplied bound - a stale `bestmove` for a
- * search we've told the engine to `stop` - is bounded by `stopTimeoutMs`;
- * on timeout the Worker is torn down and recreated (a fresh UCI session is
- * simpler and more reliable than trying to recover a potentially
- * desynchronised one), and any queued search is resumed once the new
- * Worker's handshake completes.
+ * Bounded waits, all with independent timers cleared on every path that
+ * makes them moot (success, supersession, Worker error, restart,
+ * disposal):
+ *  - `uciok`/`readyok` are each bounded by `handshakeTimeoutMs`;
+ *  - a search's own `bestmove` is bounded by `movetimeMs` *plus*
+ *    `searchWatchdogOverheadMs` - `movetimeMs` is UCI input, not a runtime
+ *    guarantee, so this adapter never simply trusts the engine to honour
+ *    it (see `armSearchWatchdog`);
+ *  - a stale `bestmove` for a search we've told the engine to `stop` is
+ *    bounded by `stopTimeoutMs`.
+ * Either of the latter two timing out is treated as "this Worker's UCI
+ * session can no longer be trusted" and recovered the same way: tear the
+ * Worker down and start a fresh one (simpler and more reliable than trying
+ * to resynchronise a possibly-wedged session) - see `abandonAndRestart`/
+ * `restartWorker`. Any queued search resumes once the new Worker's
+ * handshake completes; if the restart's own handshake also fails, the
+ * adapter moves to `error`.
+ *
+ * Worker generations: every restart creates a new Worker "generation"
+ * (`workerGeneration`, incremented in `spawnWorker`). No asynchronous
+ * handshake/search state is allowed to survive across a generation change
+ * unless it's explicitly tied to the new one - `restartWorker` proactively
+ * invalidates (rejects and clears) any leftover readiness state from the
+ * old generation *before* the new Worker's own handshake begins, and every
+ * timer (`handshake`'s own, `stopRecoveryTimer`, `searchWatchdogTimer`)
+ * captures the generation it was armed for and checks it's still current
+ * before mutating shared state when it fires - so a stale timer or
+ * leftover promise from an old, discarded Worker can never corrupt a
+ * healthy replacement's session.
  *
  * Terminal states: once `disposed` or `error`, incoming Worker
  * messages/errors are ignored outright (see `handleMessage`/
  * `handleWorkerError`) - nothing can flip the adapter back to `ready`
  * except an explicit, supported call. `dispose()` additionally detaches the
- * Worker's own `onmessage`/`onerror` callbacks as defence in depth.
+ * Worker's own `onmessage`/`onerror` callbacks as defence in depth, which
+ * is also what makes generation-tagging unnecessary for message handling
+ * specifically: an old Worker's callbacks are always detached before a
+ * replacement is created, so a message from it can never reach
+ * `handleMessage`/`handleWorkerError` at all, regardless of generation.
  */
 export class StockfishAdapter implements ChessEngine {
   private readonly workerFactory: () => EngineWorkerLike;
   private readonly handshakeTimeoutMs: number;
   private readonly stopTimeoutMs: number;
+  private readonly searchWatchdogOverheadMs: number;
 
   private worker: EngineWorkerLike | null = null;
   private lifecycleState: EngineLifecycleState = 'uninitialised';
+  /** Bumped every time a new Worker is created (`spawnWorker`). See the
+   * class doc comment's "Worker generations" section. */
+  private workerGeneration = 0;
   private uciokPending: PendingHandshake | null = null;
   private readyokPending: PendingHandshake | null = null;
   /** Shared by every concurrent `waitUntilReady()` caller currently
    * in-flight, so a second call before the first settles never overwrites
    * `readyokPending` and orphans the first caller. Cleared once settled, so
-   * the next call after that starts a fresh round trip. */
+   * the next call after that starts a fresh round trip. Always explicitly
+   * invalidated (not just left to be overwritten) at the start of a
+   * restart, so a new generation can never inherit an old one's in-flight
+   * readiness promise. */
   private readyPromise: Promise<void> | null = null;
 
   /** The search whose `go` is currently outstanding at the engine, if any -
@@ -132,17 +172,20 @@ export class StockfishAdapter implements ChessEngine {
   private outstanding: (PendingSearch & { wanted: boolean }) | null = null;
   /** At most one queued search - see the class doc comment. */
   private queued: PendingSearch | null = null;
-  /** Set for the duration of a Worker restart (see `recoverFromUnresponsiveStop`) -
+  /** Set for the duration of a Worker restart (see `restartWorker`) -
    * `outstanding` is cleared before a restart begins, so `findBestMove`
    * also checks this flag to know a new request must queue rather than
    * dispatch straight into a Worker that hasn't handshaken yet. */
   private restarting = false;
   private stopRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
+  private searchWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: StockfishAdapterOptions = {}) {
     this.workerFactory = options.workerFactory ?? defaultWorkerFactory;
     this.handshakeTimeoutMs = options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
     this.stopTimeoutMs = options.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS;
+    this.searchWatchdogOverheadMs =
+      options.searchWatchdogOverheadMs ?? DEFAULT_SEARCH_WATCHDOG_OVERHEAD_MS;
   }
 
   get state(): EngineLifecycleState {
@@ -166,8 +209,7 @@ export class StockfishAdapter implements ChessEngine {
     }
     this.lifecycleState = 'starting';
     try {
-      this.worker = this.workerFactory();
-      this.attachWorkerCallbacks();
+      this.spawnWorker();
       await this.performHandshake();
       // A concurrent dispose() during the handshake already moved this to
       // 'disposed' and rejected the promise we just awaited - if we got
@@ -214,16 +256,25 @@ export class StockfishAdapter implements ChessEngine {
 
   /** Sends `command` and resolves/rejects once `registerPending`'s slot is
    * settled by an incoming reply (see `handleLine`), a Worker error, or
-   * `handshakeTimeoutMs` elapsing - whichever happens first. A timeout
-   * clears the slot, moves the adapter to `error`, and rejects. `command`
+   * `handshakeTimeoutMs` elapsing - whichever happens first. `command`
    * is only sent once the promise executor is guaranteed to run to
    * completion, so a synchronous `postCommand` failure (no Worker) never
-   * leaves an orphan timer or a dangling pending slot behind. */
+   * leaves an orphan timer or a dangling pending slot behind.
+   *
+   * Captures the Worker generation this call was made for. If the timeout
+   * fires after a *different* generation has since become current (a
+   * restart happened for some other reason in the meantime), `clearPending`
+   * and the `error` transition are skipped - that pending slot and
+   * lifecycle state now legitimately belong to the new generation, and this
+   * stale timer must not touch either. The original caller's promise still
+   * rejects either way; only the shared, generation-scoped side effects are
+   * guarded. */
   private handshake(
     command: string,
     registerPending: (pending: PendingHandshake) => void,
     clearPending: () => void,
   ): Promise<void> {
+    const generation = this.workerGeneration;
     return new Promise<void>((resolve, reject) => {
       this.postCommand(command);
 
@@ -231,9 +282,11 @@ export class StockfishAdapter implements ChessEngine {
       const timer = setTimeout(() => {
         if (settled) return;
         settled = true;
-        clearPending();
-        if (this.lifecycleState !== 'disposed') {
-          this.lifecycleState = 'error';
+        if (this.workerGeneration === generation) {
+          clearPending();
+          if (this.lifecycleState !== 'disposed') {
+            this.lifecycleState = 'error';
+          }
         }
         reject(
           new EngineError(
@@ -294,6 +347,7 @@ export class StockfishAdapter implements ChessEngine {
   private dispatchSearch(fen: string, limits: SearchLimits): void {
     this.postCommand(`position fen ${fen}`);
     this.postCommand(`go movetime ${limits.movetimeMs}`);
+    this.armSearchWatchdog(limits);
   }
 
   /** Rejects and stops `outstanding` if it's still wanted, arming the
@@ -303,17 +357,62 @@ export class StockfishAdapter implements ChessEngine {
     if (!this.outstanding?.wanted) {
       return;
     }
+    // This search's own "did it finish in time" question is moot now that
+    // it's being stopped - `stopRecoveryTimer` (armed below) takes over
+    // watching for the engine to actually confirm the stop.
+    this.clearSearchWatchdog();
     this.outstanding.reject(reason);
     this.outstanding.wanted = false;
     this.postCommand('stop');
     this.armStopRecoveryTimer();
   }
 
+  /** Bounds an ordinary (not superseded/stopped) search: `movetimeMs` is
+   * UCI input, not a runtime guarantee, so a Worker that silently wedges
+   * after `go` (no `bestmove`, no error) would otherwise hang the caller
+   * and leave the adapter `searching` forever. Captures the Worker
+   * generation this search was dispatched to, and no-ops if a *different*
+   * generation is current by the time it fires - a restart already
+   * happened for some other reason, so this watchdog's job is already
+   * done (or moot). */
+  private armSearchWatchdog(limits: SearchLimits): void {
+    this.clearSearchWatchdog();
+    const generation = this.workerGeneration;
+    const timeoutMs = limits.movetimeMs + this.searchWatchdogOverheadMs;
+    this.searchWatchdogTimer = setTimeout(() => {
+      this.searchWatchdogTimer = null;
+      if (this.workerGeneration !== generation) {
+        return;
+      }
+      this.abandonAndRestart(
+        new EngineError(
+          `search watchdog expired after ${timeoutMs}ms with no response from the engine`,
+        ),
+      );
+    }, timeoutMs);
+  }
+
+  private clearSearchWatchdog(): void {
+    if (this.searchWatchdogTimer !== null) {
+      clearTimeout(this.searchWatchdogTimer);
+      this.searchWatchdogTimer = null;
+    }
+  }
+
+  /** Arms the "did the engine ever confirm this stop" timeout. Like
+   * `armSearchWatchdog`, captures its Worker generation and no-ops on fire
+   * if a different generation is already current. */
   private armStopRecoveryTimer(): void {
     this.clearStopRecoveryTimer();
+    const generation = this.workerGeneration;
     this.stopRecoveryTimer = setTimeout(() => {
       this.stopRecoveryTimer = null;
-      void this.recoverFromUnresponsiveStop();
+      if (this.workerGeneration !== generation) {
+        return;
+      }
+      this.abandonAndRestart(
+        new EngineError('engine did not confirm it stopped searching in time'),
+      );
     }, this.stopTimeoutMs);
   }
 
@@ -324,23 +423,40 @@ export class StockfishAdapter implements ChessEngine {
     }
   }
 
-  /** The stop-recovery timeout fired: the engine never sent a `bestmove`
-   * for the search we told it to stop, so its UCI session can no longer be
-   * trusted. Recovers by tearing down the Worker and starting a fresh one
-   * (simpler and more reliable than trying to resynchronise a
-   * possibly-wedged session) - then resumes whatever was queued, if
-   * anything. */
-  private async recoverFromUnresponsiveStop(): Promise<void> {
-    if (this.lifecycleState === 'disposed' || this.lifecycleState === 'error') {
+  /** Entry point for "this Worker's UCI session can no longer be trusted",
+   * reached either from the stop-recovery timeout (a stopped search never
+   * got confirmed) or the search watchdog (an ordinary search never got a
+   * reply at all). Rejects whatever's still genuinely outstanding, then
+   * hands off to `restartWorker`. A no-op once the adapter is already
+   * terminal. */
+  private abandonAndRestart(reason: Error): void {
+    if (this.currentLifecycleState() === 'disposed' || this.currentLifecycleState() === 'error') {
       return;
     }
-    this.restarting = true;
+    this.clearSearchWatchdog();
+    this.clearStopRecoveryTimer();
+    if (this.outstanding?.wanted) {
+      this.outstanding.reject(reason);
+    }
     this.outstanding = null;
+    void this.restartWorker();
+  }
+
+  /** Tears the current Worker down and starts a fresh one - a new UCI
+   * session is simpler and more reliable than trying to resynchronise a
+   * possibly-desynchronised one. Proactively invalidates any leftover
+   * readiness state from the old generation *before* the new Worker's own
+   * handshake begins (see the class doc comment), then resumes whatever
+   * was queued once the new handshake completes, or moves to `ready` if
+   * nothing was queued. Moves to `error` (and rejects anything queued) if
+   * the restart's own handshake also fails. */
+  private async restartWorker(): Promise<void> {
+    this.restarting = true;
     this.detachAndTerminateWorker();
+    this.invalidateReadinessState(new EngineError('engine worker was restarted'));
 
     try {
-      this.worker = this.workerFactory();
-      this.attachWorkerCallbacks();
+      this.spawnWorker();
       await this.performHandshake();
     } catch (error) {
       this.restarting = false;
@@ -394,6 +510,7 @@ export class StockfishAdapter implements ChessEngine {
     }
     const disposedError = new EngineError('engine has been disposed');
     this.clearStopRecoveryTimer();
+    this.clearSearchWatchdog();
     this.restarting = false;
     this.queued?.reject(disposedError);
     this.queued = null;
@@ -401,12 +518,31 @@ export class StockfishAdapter implements ChessEngine {
       this.outstanding.reject(disposedError);
     }
     this.outstanding = null;
-    this.uciokPending?.reject(disposedError);
-    this.uciokPending = null;
-    this.readyokPending?.reject(disposedError);
-    this.readyokPending = null;
+    this.invalidateReadinessState(disposedError);
     this.detachAndTerminateWorker();
     this.lifecycleState = 'disposed';
+  }
+
+  /** Rejects and clears any in-flight `uci`/`isready` handshake state and
+   * the shared `readyPromise` coalescing slot. Used both by `dispose()` and
+   * by `restartWorker()` (there, called *before* the new Worker's own
+   * handshake begins) - the shared mechanism that guarantees a new Worker
+   * generation never inherits a promise/pending-slot that belongs to an
+   * old one. */
+  private invalidateReadinessState(reason: Error): void {
+    this.readyPromise = null;
+    this.uciokPending?.reject(reason);
+    this.uciokPending = null;
+    this.readyokPending?.reject(reason);
+    this.readyokPending = null;
+  }
+
+  /** Creates a new Worker and bumps `workerGeneration` - the sole point
+   * where a new Worker generation begins. */
+  private spawnWorker(): void {
+    this.workerGeneration += 1;
+    this.worker = this.workerFactory();
+    this.attachWorkerCallbacks();
   }
 
   private attachWorkerCallbacks(): void {
@@ -420,7 +556,9 @@ export class StockfishAdapter implements ChessEngine {
   /** Detaches the Worker's callbacks before terminating it - defence in
    * depth alongside the `disposed`/`error` guards in `handleMessage`/
    * `handleWorkerError`, so a message that somehow still fires from a
-   * terminated Worker can't reach the adapter at all. */
+   * terminated Worker can't reach the adapter at all. This is also what
+   * makes generation-tagging unnecessary for message handling: an old
+   * Worker's callbacks are always gone before a replacement exists. */
   private detachAndTerminateWorker(): void {
     if (this.worker) {
       this.worker.onmessage = null;
@@ -487,6 +625,7 @@ export class StockfishAdapter implements ChessEngine {
       return;
     }
     this.outstanding = null;
+    this.clearSearchWatchdog();
     this.clearStopRecoveryTimer();
 
     if (finished.wanted) {
@@ -519,6 +658,7 @@ export class StockfishAdapter implements ChessEngine {
     const error = new EngineError('engine worker error', { cause: event });
     this.lifecycleState = 'error';
     this.clearStopRecoveryTimer();
+    this.clearSearchWatchdog();
     this.uciokPending?.reject(error);
     this.uciokPending = null;
     this.readyokPending?.reject(error);

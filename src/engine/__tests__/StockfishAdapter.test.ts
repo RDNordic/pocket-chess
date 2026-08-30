@@ -59,13 +59,18 @@ async function waitForSent(worker: FakeWorker, command: string): Promise<void> {
  * start from. Ample timeouts by default so normal-flow tests never race a
  * timer; override for tests that specifically want to exercise one. */
 async function startedAdapter(
-  overrides: { handshakeTimeoutMs?: number; stopTimeoutMs?: number } = {},
+  overrides: {
+    handshakeTimeoutMs?: number;
+    stopTimeoutMs?: number;
+    searchWatchdogOverheadMs?: number;
+  } = {},
 ): Promise<{ worker: FakeWorker; adapter: StockfishAdapter }> {
   const worker = new FakeWorker();
   const adapter = new StockfishAdapter({
     workerFactory: () => worker,
     handshakeTimeoutMs: overrides.handshakeTimeoutMs ?? AMPLE_TIMEOUT_MS,
     stopTimeoutMs: overrides.stopTimeoutMs ?? AMPLE_TIMEOUT_MS,
+    searchWatchdogOverheadMs: overrides.searchWatchdogOverheadMs ?? AMPLE_TIMEOUT_MS,
   });
   const startPromise = adapter.start();
 
@@ -77,6 +82,28 @@ async function startedAdapter(
   await startPromise;
 
   return { worker, adapter };
+}
+
+/** Tracks every `FakeWorker` a `workerFactory` produces, in creation order -
+ * needed by every test below that drives the adapter through one or more
+ * Worker restarts, since each restart spawns a brand new worker that the
+ * test must then drive its own handshake for. */
+function trackedWorkerFactory(): { workerFactory: () => FakeWorker; spawned: FakeWorker[] } {
+  const spawned: FakeWorker[] = [];
+  const workerFactory = () => {
+    const worker = new FakeWorker();
+    spawned.push(worker);
+    return worker;
+  };
+  return { workerFactory, spawned };
+}
+
+/** Drives one worker through a full, successful uci/isready handshake. */
+async function driveHandshake(worker: FakeWorker): Promise<void> {
+  await waitForSent(worker, 'uci');
+  worker.emit('uciok');
+  await waitForSent(worker, 'isready');
+  worker.emit('readyok');
 }
 
 describe('StockfishAdapter lifecycle', () => {
@@ -593,5 +620,251 @@ describe('StockfishAdapter disposal', () => {
 
     await expect(startPromise).rejects.toThrow(/disposed/);
     expect(adapter.state).toBe('disposed');
+  });
+});
+
+describe('StockfishAdapter search watchdog', () => {
+  it('bounds an ordinary search that gets neither a bestmove nor a worker error', async () => {
+    const { workerFactory, spawned } = trackedWorkerFactory();
+    const adapter = new StockfishAdapter({
+      workerFactory,
+      handshakeTimeoutMs: AMPLE_TIMEOUT_MS,
+      searchWatchdogOverheadMs: FAST_TIMEOUT_MS,
+    });
+    const startPromise = adapter.start();
+    await driveHandshake(spawned[0]);
+    await startPromise;
+
+    const search = adapter.findBestMove(START_FEN, { movetimeMs: 1 });
+    await waitForSent(spawned[0], 'go movetime 1');
+
+    // spawned[0] never replies at all - no bestmove, no error - so the
+    // watchdog (movetimeMs=1 + FAST_TIMEOUT_MS overhead) must still reject
+    // the caller within bounded time rather than hanging forever.
+    await expect(search).rejects.toThrow(/watchdog/);
+  });
+
+  it('recovers after a watchdog timeout and can complete a later search', async () => {
+    const { workerFactory, spawned } = trackedWorkerFactory();
+    const adapter = new StockfishAdapter({
+      workerFactory,
+      handshakeTimeoutMs: AMPLE_TIMEOUT_MS,
+      searchWatchdogOverheadMs: FAST_TIMEOUT_MS,
+    });
+    const startPromise = adapter.start();
+    await driveHandshake(spawned[0]);
+    await startPromise;
+
+    const search = adapter.findBestMove(START_FEN, { movetimeMs: 1 });
+    await waitForSent(spawned[0], 'go movetime 1');
+    await expect(search).rejects.toThrow(/watchdog/);
+
+    await vi.waitFor(() => expect(spawned[0].terminated).toBe(true), { timeout: 2_000 });
+    await vi.waitFor(() => expect(spawned).toHaveLength(2), { timeout: 2_000 });
+
+    await driveHandshake(spawned[1]);
+    await vi.waitFor(() => expect(adapter.state).toBe('ready'), { timeout: 2_000 });
+
+    const laterSearch = adapter.findBestMove(AFTER_E4_FEN, { movetimeMs: 100 });
+    await waitForSent(spawned[1], 'go movetime 100');
+    spawned[1].emit('bestmove e7e5');
+    await expect(laterSearch).resolves.toEqual({ uci: 'e7e5', ponder: undefined });
+    expect(adapter.state).toBe('ready');
+  });
+
+  it('clears the watchdog on a normal bestmove - no restart happens', async () => {
+    const { workerFactory, spawned } = trackedWorkerFactory();
+    const adapter = new StockfishAdapter({
+      workerFactory,
+      handshakeTimeoutMs: AMPLE_TIMEOUT_MS,
+      searchWatchdogOverheadMs: FAST_TIMEOUT_MS,
+    });
+    const startPromise = adapter.start();
+    await driveHandshake(spawned[0]);
+    await startPromise;
+
+    const search = adapter.findBestMove(START_FEN, { movetimeMs: 1 });
+    await waitForSent(spawned[0], 'go movetime 1');
+    spawned[0].emit('bestmove e2e4');
+    await expect(search).resolves.toEqual({ uci: 'e2e4', ponder: undefined });
+
+    // Give the watchdog's original deadline time to pass - it must not
+    // fire/restart anything, since the search already settled normally and
+    // its watchdog was cleared.
+    await new Promise((resolve) => setTimeout(resolve, FAST_TIMEOUT_MS + 100));
+    expect(spawned).toHaveLength(1);
+    expect(adapter.state).toBe('ready');
+  });
+
+  it('does not double-restart when a watched search is instead superseded', async () => {
+    const { workerFactory, spawned } = trackedWorkerFactory();
+    const adapter = new StockfishAdapter({
+      workerFactory,
+      handshakeTimeoutMs: AMPLE_TIMEOUT_MS,
+      stopTimeoutMs: AMPLE_TIMEOUT_MS,
+      searchWatchdogOverheadMs: FAST_TIMEOUT_MS,
+    });
+    const startPromise = adapter.start();
+    await driveHandshake(spawned[0]);
+    await startPromise;
+
+    const first = adapter.findBestMove(START_FEN, { movetimeMs: 1 });
+    await waitForSent(spawned[0], 'go movetime 1');
+    const second = adapter.findBestMove(AFTER_E4_FEN, { movetimeMs: 200 });
+    await expect(first).rejects.toThrow(/superseded/);
+
+    // The first search's own watchdog must have been cleared the moment it
+    // was superseded - only stopTimeoutMs (AMPLE here) governs recovery
+    // now, so waiting past what would have been the watchdog's deadline
+    // must not trigger a restart on its own.
+    await new Promise((resolve) => setTimeout(resolve, FAST_TIMEOUT_MS + 100));
+    expect(spawned).toHaveLength(1);
+    expect(adapter.state).toBe('searching');
+
+    spawned[0].emit('bestmove d2d4');
+    await waitForSent(spawned[0], 'go movetime 200');
+    spawned[0].emit('bestmove e7e5');
+    await expect(second).resolves.toEqual({ uci: 'e7e5', ponder: undefined });
+  });
+});
+
+describe('StockfishAdapter Worker generation safety', () => {
+  it("Codex's race: a waitUntilReady() pending on the old Worker cannot corrupt the recovered one", async () => {
+    const { workerFactory, spawned } = trackedWorkerFactory();
+    const adapter = new StockfishAdapter({
+      workerFactory,
+      handshakeTimeoutMs: AMPLE_TIMEOUT_MS,
+      stopTimeoutMs: FAST_TIMEOUT_MS,
+    });
+    const startPromise = adapter.start();
+    await driveHandshake(spawned[0]);
+    await startPromise;
+
+    // A search gets superseded and stopped on Worker 1 - it will never
+    // reply, so the stop-recovery timeout will eventually restart.
+    const first = adapter.findBestMove(START_FEN, { movetimeMs: 10_000 });
+    await waitForSent(spawned[0], 'go movetime 10000');
+    const second = adapter.findBestMove(AFTER_E4_FEN, { movetimeMs: 200 });
+    await expect(first).rejects.toThrow(/superseded/);
+    await waitForSent(spawned[0], 'stop');
+
+    // Meanwhile, and before Worker 1 is torn down, an unrelated caller
+    // asks for readiness - this is exactly the promise/pending state
+    // Codex found could otherwise survive into the recovered Worker's
+    // generation and starve it of its own fresh 'isready'.
+    const staleReadiness = adapter.waitUntilReady();
+    await waitForSent(spawned[0], 'isready');
+
+    // Worker 1 never replies to `stop` -> stop-recovery timeout fires ->
+    // restart. The stale readiness caller must be rejected promptly, not
+    // left hanging until its own (much longer) handshake timeout.
+    await expect(staleReadiness).rejects.toThrow(/restarted/);
+    await vi.waitFor(() => expect(spawned[0].terminated).toBe(true), { timeout: 2_000 });
+    await vi.waitFor(() => expect(spawned).toHaveLength(2), { timeout: 2_000 });
+
+    // Worker 2 must perform its own complete, fresh handshake - not reuse
+    // (or be blocked by) whatever was pending for Worker 1.
+    await waitForSent(spawned[1], 'uci');
+    spawned[1].emit('uciok');
+    await waitForSent(spawned[1], 'isready');
+    spawned[1].emit('readyok');
+    await waitForSent(spawned[1], 'go movetime 200');
+    spawned[1].emit('bestmove e7e5');
+
+    await expect(second).resolves.toEqual({ uci: 'e7e5', ponder: undefined });
+    expect(adapter.state).toBe('ready');
+  });
+
+  it('an old-generation readiness timeout cannot fire after the replacement Worker is already healthy', async () => {
+    const { workerFactory, spawned } = trackedWorkerFactory();
+    const adapter = new StockfishAdapter({
+      workerFactory,
+      handshakeTimeoutMs: FAST_TIMEOUT_MS,
+      stopTimeoutMs: FAST_TIMEOUT_MS,
+    });
+    const startPromise = adapter.start();
+    await driveHandshake(spawned[0]);
+    await startPromise;
+
+    const first = adapter.findBestMove(START_FEN, { movetimeMs: 10_000 });
+    await waitForSent(spawned[0], 'go movetime 10000');
+    const second = adapter.findBestMove(AFTER_E4_FEN, { movetimeMs: 200 });
+    await expect(first).rejects.toThrow(/superseded/);
+
+    const staleReadiness = adapter.waitUntilReady();
+    await expect(staleReadiness).rejects.toThrow(/restarted/);
+
+    await vi.waitFor(() => expect(spawned).toHaveLength(2), { timeout: 2_000 });
+    await waitForSent(spawned[1], 'uci');
+    spawned[1].emit('uciok');
+    await waitForSent(spawned[1], 'isready');
+    spawned[1].emit('readyok');
+    await waitForSent(spawned[1], 'go movetime 200');
+    spawned[1].emit('bestmove e7e5');
+    await expect(second).resolves.toEqual({ uci: 'e7e5', ponder: undefined });
+    expect(adapter.state).toBe('ready');
+
+    // Wait comfortably past what would have been Worker 1's own handshake
+    // timeout (FAST_TIMEOUT_MS). If that old timer were somehow still
+    // live, it would now force the (perfectly healthy) adapter to
+    // 'error' - it must not.
+    await new Promise((resolve) => setTimeout(resolve, FAST_TIMEOUT_MS + 150));
+    expect(adapter.state).toBe('ready');
+  });
+
+  it('a late readyok (or uciok, or bestmove) from the old Worker after restart has no effect', async () => {
+    const { workerFactory, spawned } = trackedWorkerFactory();
+    const adapter = new StockfishAdapter({
+      workerFactory,
+      handshakeTimeoutMs: AMPLE_TIMEOUT_MS,
+      stopTimeoutMs: FAST_TIMEOUT_MS,
+    });
+    const startPromise = adapter.start();
+    await driveHandshake(spawned[0]);
+    await startPromise;
+
+    const first = adapter.findBestMove(START_FEN, { movetimeMs: 10_000 });
+    await waitForSent(spawned[0], 'go movetime 10000');
+    await adapter.stop();
+    await expect(first).rejects.toThrow(/search stopped/);
+
+    await vi.waitFor(() => expect(spawned).toHaveLength(2), { timeout: 2_000 });
+    await driveHandshake(spawned[1]);
+    await vi.waitFor(() => expect(adapter.state).toBe('ready'), { timeout: 2_000 });
+
+    expect(() => spawned[0].emit('readyok')).not.toThrow();
+    expect(() => spawned[0].emit('uciok')).not.toThrow();
+    expect(() => spawned[0].emit('bestmove a2a3')).not.toThrow();
+    expect(adapter.state).toBe('ready');
+  });
+
+  it('survives multiple sequential restarts, each with its own clean handshake', async () => {
+    const { workerFactory, spawned } = trackedWorkerFactory();
+    const adapter = new StockfishAdapter({
+      workerFactory,
+      handshakeTimeoutMs: AMPLE_TIMEOUT_MS,
+      stopTimeoutMs: FAST_TIMEOUT_MS,
+    });
+    const startPromise = adapter.start();
+    await driveHandshake(spawned[0]);
+    await startPromise;
+
+    for (let round = 0; round < 3; round += 1) {
+      const search = adapter.findBestMove(START_FEN, { movetimeMs: 10_000 });
+      await waitForSent(spawned[round], 'go movetime 10000');
+      await adapter.stop();
+      await expect(search).rejects.toThrow(/search stopped/);
+
+      await vi.waitFor(() => expect(spawned).toHaveLength(round + 2), { timeout: 2_000 });
+      await driveHandshake(spawned[round + 1]);
+      await vi.waitFor(() => expect(adapter.state).toBe('ready'), { timeout: 2_000 });
+    }
+
+    expect(spawned).toHaveLength(4);
+    const finalSearch = adapter.findBestMove(AFTER_E4_FEN, { movetimeMs: 100 });
+    await waitForSent(spawned[3], 'go movetime 100');
+    spawned[3].emit('bestmove e7e5');
+    await expect(finalSearch).resolves.toEqual({ uci: 'e7e5', ponder: undefined });
+    expect(adapter.state).toBe('ready');
   });
 });

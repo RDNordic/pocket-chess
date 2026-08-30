@@ -39,6 +39,12 @@ export interface ChessEngine {
    * issued - callers never need to call `stop()` themselves before
    * requesting a new move. The resolved move is not authoritative; it must
    * be validated through `ChessGame` before it can affect a game.
+   *
+   * `limits.movetimeMs` is UCI input, not a runtime guarantee - if the
+   * engine goes silent (no `bestmove`, no error) this still rejects within
+   * a bounded time (`movetimeMs` plus a fixed watchdog overhead) rather
+   * than hanging forever, and the adapter recovers by restarting the
+   * Worker so a later call can still succeed.
    */
   findBestMove(fen: string, limits: SearchLimits): Promise<EngineMove>;
 
