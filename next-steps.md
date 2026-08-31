@@ -1,63 +1,48 @@
 # Next steps
 
-Phase 0 (scaffold), Phase 1 (deterministic local two-player chess), the
-Phase 1.1 stabilisation pass, the Phase 1.2 cleanup + first Cloudflare
-deployment experiment, and the Phase 1.3 final cleanup are done - see
-session-handoff.md for details. Phase 1 is complete and ready for sign-off.
-This file tracks concrete, actionable next work; update it as items are
-completed or superseded.
+Phase 0 (scaffold), Phase 1 (deterministic local two-player chess, plus
+the 1.1/1.2/1.3 stabilisation passes), Phase 2A (Stockfish engine
+foundation), and Phase 2B (Play computer) are done - see session-handoff.md
+for session-by-session detail. This file tracks concrete, actionable next
+work; update it as items are completed or superseded.
 
-## Optional, independent: live Cloudflare deployment (one manual step)
+## Phase 2A: Stockfish engine foundation - done
 
-Not a gate for anything else in this list. The app already builds, passes
-all tests, and validates locally via `npm run cf:dry-run` without this -
-live deployment is a separate, optional action whenever it's wanted, not a
-prerequisite for Phase 2 or any other phase.
+Reference: pocket-chess-build-spec.md sections 5, 11, 12, 13. Stockfish 18
+lite single-threaded (nmrugg/stockfish.js v18.0.0, unmodified, vendored
+under `public/engine/`) runs in a Web Worker behind `src/engine/`'s
+`ChessEngine` interface (`StockfishAdapter.ts`, `UciParser.ts`,
+`engineTypes.ts`), with the full lifecycle state machine, bounded
+timeouts on every wait (handshake, stopped-search recovery, an ordinary
+search's own watchdog), Worker-generation-safe recovery, and
+`LICENSES/THIRD-PARTY-NOTICES.md` updated. Not wired into any UI feature
+at this point - see Phase 2B below.
 
-- [ ] Run `npx wrangler login` (interactive - needs a real browser/user,
-      cannot be done from an automated session).
-- [ ] Run `npm run cf:deploy`.
-- [ ] Smoke-test the resulting `https://pocket-chess.<account>.workers.dev`
-      URL: page loads, board renders, a local two-player move works,
-      promotion works, refreshing a non-root path doesn't 404, no console
-      errors beyond the known service-worker sandbox-only caveat noted in
-      session-handoff.md.
+A pre-deployment privacy/security hardening pass followed (the standing
+privacy invariant in build spec section 26, reworded About/README privacy
+wording, and `public/_headers`'s response security headers/CSP), then the
+first live deployment to
+`https://pocket-chess.rdnordic.workers.dev` (Cloudflare Workers Static
+Assets, static-assets-only, no bindings).
 
-## Phase 2: Stockfish integration
+## Phase 2B: Play computer - done
 
-Reference: pocket-chess-build-spec.md sections 5, 11, 12, 13.
-
-- [ ] Locate and verify a Stockfish 18 lite single-threaded WASM build
-      (nmrugg/stockfish.js or an equivalent verified build). Record the
-      exact upstream version/commit.
-- [ ] Add the engine JS + WASM files under `public/engine/`. Do not load
-      from a third-party CDN at runtime (build spec section 27).
-- [ ] Update `LICENSES/THIRD-PARTY-NOTICES.md` with GPLv3 licence text,
-      attribution, source pointer, and confirmation that Stockfish was not
-      modified (build spec section 44) - mandatory before shipping this
-      phase.
-- [ ] Implement `src/engine/engineTypes.ts` (EngineOptions, SearchLimits,
-      EngineMove, PositionAnalysis) and `src/engine/UciParser.ts`.
-- [ ] Implement `src/engine/StockfishAdapter.ts` behind the `ChessEngine`
-      interface from build spec section 12, running Stockfish inside a Web
-      Worker. Track the explicit engine state machine from section 13
-      (uninitialised -> starting -> ready -> searching -> ready, plus
-      error/disposed) and reject stale search responses via request tokens.
-- [ ] Add a "Play computer" flow: choose colour (White/Black/random), start
-      a `ChessGame`, request the engine's first move if it plays White,
-      validate every engine move through `ChessGame` before applying it
-      (never treat engine output as authoritative on its own).
-- [ ] Keep the existing local two-player screen working unchanged.
-- [ ] Unit tests: UCI response parsing, stale-response rejection.
-- [ ] Engine integration tests per build spec section 40 (Worker launches,
-      uci/isready handshake, bestmove returned and legal, cancellation/stop
-      works).
-- [ ] `npm test` and `npm run build` must pass before calling Phase 2 done.
+Reference: pocket-chess-build-spec.md sections 6, 11, 13. Adds a "Play
+computer" flow (`src/features/play-computer/`): choose White or Black
+(no random option yet), `useComputerGame` coordinates `ChessGame` +
+`ChessEngine` (one engine instance per computer-game session, disposed on
+exit), every engine move is validated through `ChessGame` before it can
+affect the game, and an explicit phase model
+(`player-turn`/`computer-thinking`/`game-over`/`engine-error`) drives the
+UI rather than inferring it from disabled buttons. One fixed search time
+(1000ms) - no difficulty UI yet, that is Phase 3. Local two-player is
+unchanged.
 
 ## Deferred (do not start yet)
 
-- Phase 3: engine difficulty levels, undo/resign/restart polish for the
-  computer-game flow, random colour selection.
+- Phase 3: engine difficulty levels (Skill Level/UCI_LimitStrength UI),
+  player Elo estimation, undo/resign/restart polish for the computer-game
+  flow, random colour selection.
 - Phase 4: IndexedDB persistence (settings, games, puzzle progress).
 - Phase 5: puzzle pipeline (Lichess CC0 dataset preprocessing script,
   ~5,000 bundled puzzles, puzzle session logic).

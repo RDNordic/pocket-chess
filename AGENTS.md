@@ -16,11 +16,12 @@ and section 53 ("Core architectural decision"). Key points repeated here for
 quick reference:
 
 - The chess.js-backed domain layer (`src/chess/`) is the single authoritative
-  source of game state. React components and the future Stockfish adapter
-  must never hold or derive their own copy of board state.
+  source of game state. React components and the Stockfish adapter must
+  never hold or derive their own copy of board state - every engine move is
+  validated through `ChessGame` before it can affect a game.
 - No backend, no auth, no LLM integration, no analytics/telemetry.
 - Work phase by phase (see build spec section 47). Do not jump ahead to
-  Stockfish, puzzles, or persistence before the current phase is accepted.
+  puzzles or persistence before the current phase is accepted.
 - Run `npm test` and `npm run build` before declaring a phase complete.
 - Permanent privacy invariant (build spec section 26): game data stays
   on-device unless the user deliberately initiates an export or a future
@@ -36,23 +37,39 @@ quick reference:
   etc.) without verifying they're genuinely required against real build
   output/browser behaviour first.
 
-## Current architecture (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + release hygiene)
+## Current architecture (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + release hygiene + Phase 2A + Phase 2B)
 
 ```text
 src/
-  chess/            authoritative domain wrapper around chess.js
-                     (ChessGame, chessTypes, gameResult - outcome model)
-  components/board/ presentation-only board (no rules logic)
-  features/home/    home screen
-  features/play/    local two-player screen + use-case hook
-  features/about/   About/Licences/Privacy screen (static content only)
-  app/               App shell / routing (in-memory, no router yet)
-  styles/            global CSS
-tests/e2e/           Playwright specs (local game, checkmate, promotion) -
-                     all drive the real UI; there is no test-only runtime
-                     seam of any kind (one existed for FEN injection and was
-                     deliberately removed in Phase 1.2 - see
-                     session-handoff.md).
+  chess/             authoritative domain wrapper around chess.js
+                      (ChessGame, chessTypes, gameResult - outcome model)
+  engine/             Stockfish boundary: ChessEngine interface,
+                      StockfishAdapter (Worker/UCI lifecycle, timeouts,
+                      Worker-generation-safe recovery), UciParser,
+                      engineTypes - see the Phase 2A/2B notes below.
+  components/board/  presentation-only board (no rules logic)
+  features/home/     home screen
+  features/play/     local two-player screen + use-case hook
+  features/play-computer/  human-vs-Stockfish screens + useComputerGame
+                      (the application/use-case layer coordinating
+                      ChessGame + ChessEngine - see the Phase 2B note).
+  features/about/    About/Licences/Privacy screen (static content only)
+  app/                App shell / routing (in-memory, no router yet)
+  styles/             global CSS
+public/engine/       vendored Stockfish 18 lite single-threaded build
+                      (nmrugg/stockfish.js v18.0.0, unmodified) - the app's
+                      only local, non-CDN copy of the engine.
+public/_headers      Cloudflare Workers Static Assets response security
+                      headers (CSP, Referrer-Policy, etc.) - see the
+                      privacy/security hardening note below.
+tests/e2e/           Playwright specs (local game, checkmate, promotion,
+                     play computer) - all drive the real UI against the
+                     real vendored Stockfish Worker/WASM where relevant;
+                     there is no test-only runtime seam of any kind (one
+                     existed for FEN injection and was deliberately removed
+                     in Phase 1.2 - see session-handoff.md).
+tests/engine-integration/  lower-level real-engine test (adapter only, via
+                     a dev-server-only harness never built into dist/).
 wrangler.jsonc       Cloudflare Workers Static Assets config (assets-only,
                      no Worker script) - see README.md's Cloudflare section.
 scripts/wrangler-workspace.mjs  workspace-scoped Wrangler wrapper used by
@@ -61,7 +78,8 @@ LICENSE              GPL-3.0-or-later (full text; project notice at the top).
 LICENSES/            third-party notices for distributed runtime code.
 ```
 
-No Stockfish, no puzzles, no IndexedDB persistence yet - see next-steps.md.
+Live at `https://pocket-chess.rdnordic.workers.dev`. No puzzles, no
+IndexedDB persistence yet - see next-steps.md.
 Phase 1.1 stabilisation (post-Codex-review hardening) is done: chess.js is
 the sole source of move history (no parallel `appliedMoves` list), promotion
 requirement is determined by `ChessGame.requiresPromotion()` not by the
@@ -102,6 +120,25 @@ a small in-app About/Licences/Privacy screen
 `package.json` (Wrangler's own stated minimum); and Scheduler (a
 transitive React DOM dependency, confirmed present in the built bundle)
 added to `LICENSES/THIRD-PARTY-NOTICES.md`.
+Phase 2A (Stockfish engine foundation) is done: the `src/engine/` boundary
+above, independently reviewed and corrected across three passes -
+bounded timeouts on every wait (handshake, a stopped search's recovery,
+and an ordinary search's own watchdog, since `movetimeMs` is UCI input
+not a runtime guarantee), Worker-generation-safe recovery (a stale
+promise/timer from a torn-down Worker can never affect its replacement),
+and terminal-state (`disposed`/`error`) protection. A pre-deployment
+privacy/security hardening pass followed (`public/_headers`'s CSP -
+`script-src 'self'` with no `wasm-unsafe-eval`, verified unnecessary
+against the real engine rather than assumed), then the first live
+deployment.
+Phase 2B (Play computer) is done: `src/features/play-computer/` wires
+that engine into the UI for the first time via `useComputerGame` (the
+application/use-case layer - no UCI/Worker/chess-rule logic in React),
+one engine instance per computer-game session, every engine move
+validated through `ChessGame` before it can affect the game, and an
+explicit phase model (`player-turn`/`computer-thinking`/`game-over`/
+`engine-error`) rather than inferring state from disabled buttons. One
+fixed search time (1000ms) - no difficulty UI yet (Phase 3).
 
 ## Working rules for this repo
 
