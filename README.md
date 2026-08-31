@@ -1,6 +1,8 @@
 # Pocket Chess
 
-Offline-first personal chess trainer PWA. No accounts, no backend, no tracking.
+Offline-first personal chess trainer. No accounts, no analytics, no
+advertising and no application telemetry. Gameplay and engine processing
+run locally in your browser.
 
 **Licence:** [GPL-3.0-or-later](LICENSE). See
 [LICENSES/THIRD-PARTY-NOTICES.md](LICENSES/THIRD-PARTY-NOTICES.md) for
@@ -9,6 +11,27 @@ screen (see below) for a user-facing summary of both.
 
 See pocket-chess-build-spec.md for the full specification and AGENTS.md /
 CLAUDE.md for the current implementation status and working rules.
+
+## Privacy
+
+Pocket Chess is designed to collect as little information about you as
+possible: no account or sign-in, no analytics, no advertising, no
+profiling, and no application telemetry. Game data and settings are
+intended to remain on your device unless you deliberately export them.
+See build spec section 26 for the standing privacy invariant this project
+holds itself to, and the list of future features (cloud sync, accounts,
+multiplayer, crash reporting, telemetry, analytics, remote AI, PGN
+uploads, social features) that each require a privacy review before
+shipping.
+
+Separately: when this application is served from a website, the hosting
+provider necessarily receives ordinary technical request information -
+such as IP address and HTTP request metadata - in order to deliver and
+secure it, the same as any website. That is a normal part of how the web
+works, is unrelated to this application's own code, and Pocket Chess
+itself does not use that hosting request data for analytics, advertising,
+behavioural profiling, or gameplay tracking, nor does it transmit
+positions, games, moves, or playing behaviour to any analytics service.
 
 ## Local development
 
@@ -29,7 +52,14 @@ npm test
 npm run lint
 npm run build
 npm run test:e2e
+npm run test:engine
 ```
+
+`test:engine` starts a real Stockfish Worker/WASM instance against
+`src/engine/StockfishAdapter.ts` in an actual browser (see
+`tests/engine-integration/`) - it needs the vendored engine files under
+`public/engine/`, which are the app's only local (non-CDN) copy of
+Stockfish.
 
 ## Cloudflare local development/preview
 
@@ -59,6 +89,16 @@ this tooling can do on your behalf):
 ```bash
 npx wrangler login
 ```
+
+Response security headers (`Content-Security-Policy`, `Referrer-Policy`,
+`X-Content-Type-Options`, `Permissions-Policy`) are set via
+[`public/_headers`](public/_headers), Cloudflare Workers Static Assets'
+supported `_headers`-file mechanism (the same convention Cloudflare Pages
+uses) - copied into `dist/_headers` by the normal build like everything
+else under `public/`. The CSP is derived from what this app's production
+bundle, service worker, PWA manifest, and Stockfish Worker/WASM actually
+need (verified against real build output and browser behaviour, not
+assumed) - see CLAUDE.md/AGENTS.md before loosening it.
 
 Cloudflare here is only a static file host for the already-built
 `dist/` output (see `wrangler.jsonc`) - there is no Worker backend, no
@@ -122,8 +162,10 @@ the source repository.
 
 ## Status
 
-Phase 0 (scaffold) and Phase 1 (deterministic local two-player chess) are
-implemented, and the app can be deployed to Cloudflare Workers Static
-Assets (see above - this is optional and not a prerequisite for later
-phases). Stockfish, puzzles, and persistence are not yet built - see
-next-steps.md.
+Phase 0 (scaffold), Phase 1 (deterministic local two-player chess), and
+Phase 2A (Stockfish engine foundation: a vendored local WASM build behind
+a tested `src/engine/` boundary) are implemented, and the app can be
+deployed to Cloudflare Workers Static Assets (see above - this is
+optional and not a prerequisite for later phases). Stockfish is not yet
+wired into any user-facing "Play computer" feature, and puzzles and
+persistence are not yet built - see next-steps.md.

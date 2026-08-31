@@ -86,23 +86,33 @@ export function AboutScreen({ onExit }: AboutScreenProps) {
 
       <section aria-labelledby="privacy-heading">
         <h2 id="privacy-heading">Privacy</h2>
+        <p>
+          Pocket Chess is designed to collect as little information about
+          you as possible.
+        </p>
         <ul>
           <li>No account or sign-in.</li>
           <li>No analytics.</li>
           <li>No advertising.</li>
-          <li>No telemetry from this application.</li>
-          <li>No backend - chess rules and game state run entirely in your browser.</li>
-          <li>No game history is uploaded anywhere.</li>
+          <li>No profiling.</li>
+          <li>No application telemetry.</li>
+          <li>No game history is uploaded.</li>
+          <li>Chess rules and Stockfish run locally in your browser.</li>
+          <li>
+            Game data and settings are intended to remain on your device
+            unless you deliberately export them.
+          </li>
         </ul>
         <p>
-          Pocket Chess is distributed as static files that can be hosted by
-          any standard web host. Whichever provider hosts it will
-          necessarily receive ordinary HTTP requests to deliver those files
-          - the same as any website - which may include information that
-          provider's own web server ordinarily logs, such as your IP
-          address. That is a normal part of how the web works, is unrelated
-          to this application's own code, and is not used by Pocket Chess
-          itself for tracking or analytics.
+          When Pocket Chess is served from a website, the hosting provider
+          necessarily receives ordinary technical request information - such
+          as your IP address and HTTP request metadata - in order to deliver
+          and secure the application. That is a normal part of how the web
+          works and is unrelated to this application's own code. Pocket
+          Chess itself does not use that hosting request data for analytics,
+          advertising, behavioural profiling, or gameplay tracking, and does
+          not transmit positions, games, moves, or playing behaviour to any
+          analytics service.
         </p>
       </section>
     </div>

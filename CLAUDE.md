@@ -48,6 +48,20 @@ rules" (section 49) as binding.
   Wrangler's own bin entry point directly with `shell: false` and no
   `npx` - do not reintroduce a shell or `npx` there without a concrete
   reason.
+- Permanent privacy invariant (build spec section 26): game data stays
+  on-device unless the user deliberately initiates an export or a future
+  sync feature. Introducing cloud sync, accounts, multiplayer, crash
+  reporting, telemetry, analytics, remote AI, uploaded PGNs, or social
+  features requires a privacy review (update the About/Privacy screen,
+  build spec section 26, and README.md together) before it ships.
+- `public/_headers` (Cloudflare Workers Static Assets' supported header
+  mechanism - verified against the installed Wrangler's own source, not
+  assumed) carries the response security headers, including a CSP derived
+  from what the production bundle/service worker/PWA manifest/Stockfish
+  Worker actually need. Do not add CSP allowances (`unsafe-eval`,
+  `unsafe-inline`, `blob:`, `data:`, external origins, etc.) without
+  verifying they're genuinely required against real build output/browser
+  behaviour first.
 
 ## Before finishing any change
 

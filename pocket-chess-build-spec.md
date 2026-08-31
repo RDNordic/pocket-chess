@@ -863,6 +863,37 @@ The application should contain:
 
 If deployed publicly, write a short privacy statement explaining that gameplay and history remain local to the device.
 
+## Permanent privacy invariant
+
+This is a standing architectural requirement, not a Phase-specific note:
+
+> **Game data stays on-device unless the user deliberately initiates an
+> export or a future sync feature.**
+
+Local browser storage (IndexedDB, `localStorage`, Cache Storage/the service
+worker's own cache) remains fully compatible with this invariant - "on
+device" means exactly that storage, provided nothing in the application
+transmits its contents elsewhere on its own initiative. The invariant is
+about outbound transmission, not about which local storage API is used.
+
+Introducing any of the following must trigger a privacy review against this
+invariant before it ships, not after:
+
+- cloud sync;
+- accounts;
+- multiplayer;
+- crash reporting;
+- telemetry;
+- analytics;
+- remote AI;
+- uploaded PGNs;
+- social features.
+
+A privacy review means: identify exactly what would newly leave the device,
+under what circumstances, whether the user deliberately initiated it, and
+update the in-app About/Privacy screen, this section, and README.md
+accordingly before the feature is considered done - not as a follow-up.
+
 ---
 
 # 27. Security requirements

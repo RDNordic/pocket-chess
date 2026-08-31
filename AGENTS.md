@@ -22,6 +22,19 @@ quick reference:
 - Work phase by phase (see build spec section 47). Do not jump ahead to
   Stockfish, puzzles, or persistence before the current phase is accepted.
 - Run `npm test` and `npm run build` before declaring a phase complete.
+- Permanent privacy invariant (build spec section 26): game data stays
+  on-device unless the user deliberately initiates an export or a future
+  sync feature. Introducing cloud sync, accounts, multiplayer, crash
+  reporting, telemetry, analytics, remote AI, uploaded PGNs, or social
+  features requires a privacy review (update the About/Privacy screen,
+  build spec section 26, and README.md together) before it ships.
+- `public/_headers` (Cloudflare Workers Static Assets' supported header
+  mechanism) carries the response security headers, including a CSP
+  derived from what the production bundle/service worker/PWA
+  manifest/Stockfish Worker actually need. Do not add CSP allowances
+  (`unsafe-eval`, `unsafe-inline`, `blob:`, `data:`, external origins,
+  etc.) without verifying they're genuinely required against real build
+  output/browser behaviour first.
 
 ## Current architecture (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + release hygiene)
 
