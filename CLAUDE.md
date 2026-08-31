@@ -20,8 +20,11 @@ rules" (section 49) as binding.
 
 - No backend, no accounts/auth, no LLM/AI features, no analytics/telemetry.
 - chess.js (via `src/chess/ChessGame.ts`) is the only authoritative source of
-  chess state. Stockfish (Phase 2+) validates through it, never replaces it.
-- Stockfish must run in a Web Worker, never on the main thread, once added.
+  chess state. Stockfish validates through it, never replaces it - every
+  engine move (`src/features/play-computer/useComputerGame.ts`) is applied
+  via `ChessGame.applyUciMove()`, which rejects anything illegal/malformed
+  without corrupting the game.
+- Stockfish runs in a Web Worker, never on the main thread.
 - Work one phase at a time per the build spec's phase list; do not
   pre-implement later phases.
 - No test-only runtime seam reachable via a browser global/URL/query string
