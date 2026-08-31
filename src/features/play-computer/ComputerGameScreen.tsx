@@ -36,6 +36,7 @@ export function ComputerGameScreen({ playerColour, onExit, engineOptions }: Comp
     legalTargets,
     phase,
     engineError,
+    isRetrying,
     selectSquare,
     move,
     retry,
@@ -76,8 +77,8 @@ export function ComputerGameScreen({ playerColour, onExit, engineOptions }: Comp
 
       <div className={styles.controls}>
         {phase === 'engine-error' ? (
-          <button type="button" onClick={retry}>
-            Retry
+          <button type="button" onClick={retry} disabled={isRetrying}>
+            {isRetrying ? 'Retrying…' : 'Retry'}
           </button>
         ) : (
           <button

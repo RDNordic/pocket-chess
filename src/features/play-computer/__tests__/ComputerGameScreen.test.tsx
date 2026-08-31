@@ -32,6 +32,40 @@ class ImmediateFakeEngine implements ChessEngine {
   }
 }
 
+/** Engine whose `start()` rejects on its first instance (so the screen
+ * reaches `engine-error`) and never settles on any later instance, so the
+ * test can observe the Retry button staying disabled while a replacement
+ * starts - used only for the Retry-button test below. */
+class FailFirstThenHangEngine implements ChessEngine {
+  state: ChessEngine['state'] = 'uninitialised';
+
+  constructor(private readonly isFirst: boolean) {}
+
+  async start(): Promise<void> {
+    if (this.isFirst) throw new Error('boom');
+    return new Promise(() => {});
+  }
+
+  async waitUntilReady(): Promise<void> {}
+
+  async findBestMove(): Promise<EngineMove> {
+    return new Promise(() => {});
+  }
+
+  async stop(): Promise<void> {}
+
+  dispose(): void {
+    this.state = 'disposed';
+  }
+}
+
+function failThenHangEngineFactory(): { createEngine: () => ChessEngine } {
+  let callCount = 0;
+  return {
+    createEngine: () => new FailFirstThenHangEngine(++callCount === 1),
+  };
+}
+
 describe('ComputerGameScreen', () => {
   it('playing White: renders the board and applies the engine reply after a player move', async () => {
     const user = userEvent.setup();
@@ -67,6 +101,22 @@ describe('ComputerGameScreen', () => {
       await screen.findByRole('gridcell', { name: /^e4,.*white pawn/i }),
     ).toBeInTheDocument();
     expect(screen.getByText(/black to move/i)).toBeInTheDocument();
+  });
+
+  it('the Retry button is disabled while a replacement engine is starting', async () => {
+    const user = userEvent.setup();
+    const { createEngine } = failThenHangEngineFactory();
+    render(
+      <ComputerGameScreen playerColour="white" onExit={() => {}} engineOptions={{ createEngine }} />,
+    );
+
+    const retryButton = await screen.findByRole('button', { name: /retry/i });
+    expect(retryButton).toBeEnabled();
+
+    await user.click(retryButton);
+
+    const retryingButton = await screen.findByRole('button', { name: /retrying/i });
+    expect(retryingButton).toBeDisabled();
   });
 
   it('Back button calls onExit', async () => {

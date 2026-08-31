@@ -66,6 +66,15 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
   const engineRef = useRef<ChessEngine | null>(null);
   const startPromiseRef = useRef<Promise<void> | null>(null);
   const sessionRef = useRef(0);
+  // True from mount until the unmount cleanup runs - guards the one
+  // asynchronous continuation (retry()'s own `.finally`) that isn't
+  // already covered by the session-token check, so it never calls setState
+  // after this hook's owning component has unmounted.
+  const mountedRef = useRef(true);
+  // Synchronous (unlike the `isRetrying` state below) so a second retry()
+  // call in the same tick - before React has re-rendered with the
+  // disabled button - still sees a retry already in flight and bails.
+  const retryInFlightRef = useRef(false);
 
   const [snapshot, setSnapshot] = useState<GameStateSnapshot>(() => game.getSnapshot());
   const [selectedSquare, setSelectedSquare] = useState<SquareId | null>(null);
@@ -73,6 +82,23 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
     playerColour === 'black' ? 'computer-thinking' : 'player-turn',
   );
   const [engineError, setEngineError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  /** Disposes whatever engine is currently live for this session (if any)
+   * and bumps the session token, so nothing further - a late response, a
+   * queued search, a stray repeat call - can act on it again. This is the
+   * one shared path for every way a session's engine involvement ends:
+   * the game just became terminal (whether the player's move or the
+   * engine's own move ended it), `retry()` discarding a failed engine
+   * before starting a fresh one, and unmount. `engineRef.current` is
+   * nulled immediately after, so a later call (e.g. unmount right after a
+   * terminal move already disposed it) is a safe no-op - each engine
+   * instance is disposed at most once. */
+  const disposeCurrentEngine = useCallback(() => {
+    sessionRef.current += 1;
+    engineRef.current?.dispose();
+    engineRef.current = null;
+  }, []);
 
   const legalTargets = useMemo(() => {
     if (!selectedSquare) return [];
@@ -106,14 +132,25 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
 
         const nextSnapshot = game.getSnapshot();
         setSnapshot(nextSnapshot);
-        setPhase(nextSnapshot.outcome.status === 'in-progress' ? 'player-turn' : 'game-over');
+        if (nextSnapshot.outcome.status === 'in-progress') {
+          setPhase('player-turn');
+        } else {
+          // The engine's own move ended the game - dispose it immediately
+          // rather than waiting for unmount, per the engine lifecycle rule
+          // ("one engine instance per session, disposed when that session
+          // ends"). No further search must ever be requested past this
+          // point; disposeCurrentEngine's session bump guarantees that even
+          // if something else were still in flight.
+          setPhase('game-over');
+          disposeCurrentEngine();
+        }
       } catch {
         if (session !== sessionRef.current) return;
         setPhase('engine-error');
         setEngineError(ENGINE_UNAVAILABLE_MESSAGE);
       }
     },
-    [game, movetimeMs],
+    [game, movetimeMs, disposeCurrentEngine],
   );
 
   /** Starts a fresh engine for a new session (initial mount, or a retry
@@ -134,7 +171,13 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
 
       const currentSnapshot = game.getSnapshot();
       if (currentSnapshot.outcome.status !== 'in-progress') {
+        // Defensive: not reachable in the current UI (a fresh session
+        // always starts from the initial position), but kept consistent
+        // with the "no live engine past a terminal game" rule in case a
+        // future caller ever starts this hook from an already-terminal
+        // position.
         setPhase('game-over');
+        disposeCurrentEngine();
         return;
       }
       if (currentSnapshot.turn !== playerColour) {
@@ -147,14 +190,14 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
       setPhase('engine-error');
       setEngineError(ENGINE_UNAVAILABLE_MESSAGE);
     }
-  }, [createEngine, game, playerColour, requestComputerMove]);
+  }, [createEngine, game, playerColour, requestComputerMove, disposeCurrentEngine]);
 
   useEffect(() => {
+    mountedRef.current = true;
     void initialiseEngine();
     return () => {
-      sessionRef.current += 1;
-      engineRef.current?.dispose();
-      engineRef.current = null;
+      mountedRef.current = false;
+      disposeCurrentEngine();
     };
     // Intentionally mount/unmount only: this hook's lifetime is one
     // computer-game session (see the class doc comment) - a later change to
@@ -193,25 +236,42 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
       const nextSnapshot = game.getSnapshot();
       setSnapshot(nextSnapshot);
       if (nextSnapshot.outcome.status !== 'in-progress') {
+        // The player's own move ended the game - dispose the engine
+        // immediately rather than waiting for unmount (see the matching
+        // comment in requestComputerMove). No search is started.
         setPhase('game-over');
+        disposeCurrentEngine();
         return;
       }
       void requestComputerMove(nextSnapshot.fen);
     },
-    [phase, game, requestComputerMove],
+    [phase, game, requestComputerMove, disposeCurrentEngine],
   );
 
   /** Recovers from `engine-error` by disposing whatever's left of the
    * failed engine and starting a fresh one - the smallest sensible retry
    * path (build spec section 38's "engine failed to initialise"/"engine
    * search timeout" guidance), without reloading the page or ever
-   * substituting a non-engine move. */
+   * substituting a non-engine move.
+   *
+   * `retryInFlightRef` is a synchronous guard against a second `retry()`
+   * call landing before React re-renders with the button disabled (e.g.
+   * two rapid taps in the same tick, or a direct double call in a test):
+   * without it, both calls would see `phase === 'engine-error'` and each
+   * spin up its own replacement Worker. `isRetrying` mirrors it as UI
+   * state so the Retry button can be disabled while a replacement engine
+   * is starting. */
   const retry = useCallback(() => {
     if (phase !== 'engine-error') return;
-    engineRef.current?.dispose();
-    engineRef.current = null;
-    void initialiseEngine();
-  }, [phase, initialiseEngine]);
+    if (retryInFlightRef.current) return;
+    retryInFlightRef.current = true;
+    setIsRetrying(true);
+    disposeCurrentEngine();
+    void initialiseEngine().finally(() => {
+      retryInFlightRef.current = false;
+      if (mountedRef.current) setIsRetrying(false);
+    });
+  }, [phase, initialiseEngine, disposeCurrentEngine]);
 
   const requiresPromotion = useCallback(
     (from: SquareId, to: SquareId) => game.requiresPromotion(from, to),
@@ -224,6 +284,7 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
     legalTargets,
     phase,
     engineError,
+    isRetrying,
     selectSquare,
     move,
     retry,

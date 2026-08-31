@@ -269,6 +269,9 @@ describe('useComputerGame', () => {
     act(() => result.current.move('h5', 'f7'));
     await waitFor(() => expect(result.current.phase).toBe('game-over'));
     expect(result.current.snapshot.outcome).toEqual({ status: 'checkmate', winner: 'white' });
+    // The engine is disposed immediately on the terminal transition, exactly
+    // once - not left alive until unmount.
+    expect(engines[0].disposeCallCount).toBe(1);
     // No further search was requested for the now-terminal position.
     expect(engines[0].findBestMoveCalls).toHaveLength(3);
   });
@@ -292,7 +295,63 @@ describe('useComputerGame', () => {
 
     await waitFor(() => expect(result.current.phase).toBe('game-over'));
     expect(result.current.snapshot.outcome).toEqual({ status: 'checkmate', winner: 'black' });
+    // The engine is disposed immediately on the terminal transition, exactly
+    // once - not left alive until unmount.
+    expect(engines[0].disposeCallCount).toBe(1);
     expect(engines[0].findBestMoveCalls).toHaveLength(2);
+  });
+
+  it('unmounting after a terminal-move disposal is safe and does not dispose the engine twice', async () => {
+    const { createEngine, engines } = engineFactory();
+    const { result, unmount } = renderHook(() => useComputerGame('white', { createEngine }));
+    act(() => engines[0].resolveStart());
+    await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+    // Fool's mate again, purely to reach a terminal, already-disposed state
+    // before unmounting.
+    act(() => result.current.move('f2', 'f3'));
+    await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
+    act(() => engines[0].resolveMove('e7e5'));
+    await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+    act(() => result.current.move('g2', 'g4'));
+    await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(2));
+    act(() => engines[0].resolveMove('d8h4'));
+    await waitFor(() => expect(result.current.phase).toBe('game-over'));
+    expect(engines[0].disposeCallCount).toBe(1);
+
+    expect(() => unmount()).not.toThrow();
+    // The engine that was already disposed on the terminal transition must
+    // not be disposed again by the unmount cleanup.
+    expect(engines[0].disposeCallCount).toBe(1);
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it('rapid repeated retry() calls create only one replacement engine', async () => {
+    const { createEngine, engines } = engineFactory();
+    const { result } = renderHook(() => useComputerGame('black', { createEngine }));
+
+    act(() => engines[0].rejectStart(new Error('boom')));
+    await waitFor(() => expect(result.current.phase).toBe('engine-error'));
+
+    // Two calls in the same tick, as a double-tap before React re-renders
+    // with the button disabled would produce.
+    act(() => {
+      result.current.retry();
+      result.current.retry();
+    });
+
+    expect(engines[0].disposeCallCount).toBe(1);
+    expect(engines).toHaveLength(2);
+    expect(result.current.isRetrying).toBe(true);
+
+    act(() => engines[1].resolveStart());
+    await waitFor(() => expect(engines[1].findBestMoveCalls).toHaveLength(1));
+    expect(engines).toHaveLength(2);
+
+    act(() => engines[1].resolveMove('e2e4'));
+    await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+    expect(result.current.isRetrying).toBe(false);
   });
 
   it('an abandoned/disposed game ignores a late engine outcome without error', async () => {
