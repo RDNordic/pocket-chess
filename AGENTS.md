@@ -128,8 +128,8 @@ not a runtime guarantee), Worker-generation-safe recovery (a stale
 promise/timer from a torn-down Worker can never affect its replacement),
 and terminal-state (`disposed`/`error`) protection. A pre-deployment
 privacy/security hardening pass followed (`public/_headers`'s CSP -
-`script-src 'self'` with no `wasm-unsafe-eval`, verified unnecessary
-against the real engine rather than assumed), then the first live
+`script-src 'self'` with no `wasm-unsafe-eval`, which local
+validation at the time suggested was unnecessary), then the first live
 deployment.
 Phase 2B (Play computer) is done: `src/features/play-computer/` wires
 that engine into the UI for the first time via `useComputerGame` (the
@@ -139,6 +139,11 @@ validated through `ChessGame` before it can affect the game, and an
 explicit phase model (`player-turn`/`computer-thinking`/`game-over`/
 `engine-error`) rather than inferring state from disabled buttons. One
 fixed search time (1000ms) - no difficulty UI yet (Phase 3).
+A narrowly scoped production bug fix followed Phase 2B: production
+(unlike local validation) blocked `WebAssembly.instantiate()` under
+`script-src 'self'`, so `public/_headers`'s CSP now reads `script-src
+'self' 'wasm-unsafe-eval'` - the minimal WebAssembly-compilation
+allowance, not the broader `unsafe-eval`.
 
 ## Working rules for this repo
 

@@ -38,6 +38,14 @@ UI rather than inferring it from disabled buttons. One fixed search time
 (1000ms) - no difficulty UI yet, that is Phase 3. Local two-player is
 unchanged.
 
+## Production bug fix: WASM blocked by CSP - done
+
+Production (unlike local validation) blocked `WebAssembly.instantiate()`
+under the deployed `script-src 'self'`, so Stockfish could never start in
+production despite passing locally. Fix: `public/_headers`'s CSP now reads
+`script-src 'self' 'wasm-unsafe-eval'` - the minimal WebAssembly-compilation
+allowance, not the broader `unsafe-eval`. No other CSP directive changed.
+
 ## Deferred (do not start yet)
 
 - Phase 3: engine difficulty levels (Skill Level/UCI_LimitStrength UI),
