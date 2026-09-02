@@ -62,8 +62,17 @@
      shrunk square there. 6.5cqw mirrors the previous 6.5vw numerically:
      the board is ~99vw in the normal (width-bound, portrait) case, so this
      is a near-identical size there and now also correctly scales down
-     wherever the board itself is smaller than that. */
-  font-size: clamp(1.5rem, 6.5cqw, 3rem);
+     wherever the board itself is smaller than that.
+     The outer `min(..., 10cqw)` bounds the inner clamp's own `1.5rem`
+     floor, which is otherwise a fixed 24px regardless of board size: once
+     the board is small enough that a square (12.5cqw each, 8 to a board)
+     drops under ~24px, that fixed floor stops shrinking with it and a
+     piece can end up wider than its own square. 10cqw is comfortably
+     under one square's own 12.5cqw width at every board size, so this
+     applies only where the fixed floor would otherwise have won (a board
+     under ~192px) - normal portrait/desktop sizing (driven by the 6.5cqw
+     preferred term well above this cap there) is unaffected. */
+  font-size: min(clamp(1.5rem, 6.5cqw, 3rem), 10cqw);
   line-height: 1;
 }
 
