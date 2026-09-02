@@ -10,6 +10,10 @@
   --color-board-dark: #6b8f5a;
   --color-highlight: rgba(79, 140, 255, 0.45);
   --color-check: rgba(220, 60, 60, 0.55);
+  /* Square tint for the opponent engine's last successfully applied move
+     (Play Computer only) - a single, easy-to-retune value pending physical
+     iPhone testing. Green is the current preferred direction. */
+  --color-computer-move: rgba(46, 196, 90, 0.45);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 

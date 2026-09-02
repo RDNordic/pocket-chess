@@ -2,7 +2,13 @@
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(8, 1fr);
-  width: min(92vw, 520px);
+  /* Sized to be the dominant element on an iPhone-width viewport (96vw)
+     while staying capped for desktop (640px); 72dvh is a safety bound for
+     short/landscape viewports, not the usual mobile-portrait constraint,
+     which is width - a square board on a narrow screen is inherently
+     width-bound, not height-bound, so this is deliberately not a
+     device-specific pixel value. */
+  width: min(99vw, 78dvh, 640px);
   aspect-ratio: 1 / 1;
   border-radius: 8px;
   overflow: hidden;
@@ -26,7 +32,7 @@
   border: none;
   padding: 0;
   cursor: pointer;
-  font-size: clamp(1.5rem, 6vw, 2.6rem);
+  font-size: clamp(1.5rem, 6.5vw, 3rem);
   line-height: 1;
 }
 
@@ -55,6 +61,19 @@
   inset: 0;
   background: var(--color-highlight);
   opacity: 0.6;
+}
+
+/* The opponent engine's last successfully applied move (Play Computer
+   only). Declared after .lastMove so it wins outright when both would
+   apply to the same square (a single element has only one ::after, so this
+   is source-order precedence, not a colour blend) - see the comment where
+   this class is assigned in Board.tsx. A background tint only: it never
+   covers the piece itself, which stacks above via .piece's z-index. */
+.computerMove::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--color-computer-move);
 }
 
 .check::after {
@@ -87,12 +106,21 @@
 .piece {
   position: relative;
   z-index: 1;
-  color: #111;
-  filter: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.35));
+  /* Unicode chess glyphs are single-colour outlines with no fill baked in
+     by the font, so a plain dark `color` alone (the previous approach)
+     left white pieces reading as a thin, low-contrast outline on the light
+     squares - a real legibility problem on a small mobile screen. A
+     text-stroke rim plus an opposite-toned fill gives both colours a
+     genuinely solid, high-contrast piece silhouette against either square
+     colour. */
+  color: #f7f7f2;
+  -webkit-text-stroke: 1.4px #1a1a1a;
+  paint-order: stroke fill;
 }
 
 .piece[data-colour='black'] {
-  color: #000;
+  color: #111;
+  -webkit-text-stroke: 1px rgba(255, 255, 255, 0.55);
 }
 
 .promotionOverlay {

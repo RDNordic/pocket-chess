@@ -11,6 +11,10 @@ interface BoardProps {
   /** Squares the currently selected piece may legally move to. */
   legalTargets: SquareId[];
   selectedSquare: SquareId | null;
+  /** From/to squares of the opponent engine's most recently successfully
+   * applied move (Play Computer only) - `undefined`/`null` elsewhere (e.g.
+   * local two-player), which simply renders no highlight. */
+  lastComputerMove?: { from: SquareId; to: SquareId } | null;
   interactionDisabled?: boolean;
   onSelectSquare: (square: SquareId) => void;
   onMove: (from: SquareId, to: SquareId, promotion?: PromotionPiece) => void;
@@ -32,6 +36,7 @@ export function Board({
   orientation,
   legalTargets,
   selectedSquare,
+  lastComputerMove,
   interactionDisabled = false,
   onSelectSquare,
   onMove,
@@ -117,6 +122,9 @@ export function Board({
             const isLastMove =
               snapshot.lastMove &&
               (square === snapshot.lastMove.from || square === snapshot.lastMove.to);
+            const isComputerMove =
+              lastComputerMove != null &&
+              (square === lastComputerMove.from || square === lastComputerMove.to);
             const isCheckSquare = square === kingSquareInCheck;
 
             const classNames = [
@@ -124,6 +132,12 @@ export function Board({
               isLightSquare(square) ? styles.light : styles.dark,
               isSelected ? styles.selected : '',
               !isSelected && isLastMove ? styles.lastMove : '',
+              // Takes precedence over the generic last-move highlight above
+              // when both would land on the same square (the computer's own
+              // move is, by definition, also the game's last move) - only
+              // one `::after` background can render per square, so this is
+              // a plain boolean override, not a colour blend.
+              !isSelected && isComputerMove ? styles.computerMove : '',
               isCheckSquare ? styles.check : '',
               isLegalTarget && !piece ? styles.legalTarget : '',
               isLegalTarget && piece ? styles.legalCapture : '',
@@ -135,6 +149,7 @@ export function Board({
               piece ? pieceAccessibleName(piece.type, piece.colour) : undefined,
               isLegalTarget ? 'legal move target' : undefined,
               isCheckSquare ? 'king in check' : undefined,
+              isComputerMove ? "computer's last move" : undefined,
             ]
               .filter(Boolean)
               .join(', ');

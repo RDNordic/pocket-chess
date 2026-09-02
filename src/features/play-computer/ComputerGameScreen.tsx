@@ -37,6 +37,7 @@ export function ComputerGameScreen({ playerColour, onExit, engineOptions }: Comp
     phase,
     engineError,
     isRetrying,
+    lastComputerMove,
     selectSquare,
     move,
     retry,
@@ -69,6 +70,7 @@ export function ComputerGameScreen({ playerColour, onExit, engineOptions }: Comp
         orientation={orientation}
         legalTargets={legalTargets}
         selectedSquare={selectedSquare}
+        lastComputerMove={lastComputerMove}
         interactionDisabled={boardInteractionDisabled}
         onSelectSquare={selectSquare}
         onMove={move}

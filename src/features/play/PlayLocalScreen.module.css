@@ -2,17 +2,28 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1rem;
+  /* Centers the header/status/board/controls block vertically instead of
+     pinning it to the top with dead space below - a square board on a
+     narrow phone is inherently width-bound (it can never be wide enough to
+     also consume all the leftover viewport height), so this is what
+     actually makes the composition feel board-dominant on tall screens. */
+  justify-content: center;
+  gap: 0.5rem;
+  /* No horizontal inset here - the board (a direct child) uses this all the
+     way to the edge to be the dominant element on a narrow phone; .header
+     and .controls add their own small side padding below so they don't sit
+     flush against the edge. */
+  padding: 0.5rem 0;
   min-height: 100dvh;
 }
 
 .header {
   width: 100%;
-  max-width: 520px;
+  max-width: 640px;
   display: flex;
   align-items: center;
   gap: 1rem;
+  padding-inline: 0.75rem;
 }
 
 .header button {
@@ -36,7 +47,8 @@
 .controls {
   display: flex;
   gap: 0.5rem;
-  width: min(92vw, 520px);
+  width: min(96vw, 640px);
+  padding-inline: 0.75rem;
 }
 
 .controls button {
