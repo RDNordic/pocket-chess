@@ -1,13 +1,42 @@
 .board {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  grid-template-rows: repeat(8, 1fr);
-  width: min(92vw, 520px);
+  /* `minmax(0, 1fr)`, not bare `1fr` (== `minmax(auto, 1fr)`): a bare `1fr`
+     track's implicit `auto` minimum is its content's max-content size and
+     never shrinks below it, regardless of `overflow: hidden` on this
+     container - overflow only clips the *rendered* result, it doesn't
+     change track sizing. With large piece glyphs in a short/landscape
+     viewport (this container's own width driven down by the `dvh` term
+     below), that let the grid's real content width exceed this box's
+     authored width, which both got clipped (the h-file vanishing) and, via
+     grid's own automatic minimum size, pushed this box itself taller than
+     intended (shoving .controls off-screen in the surrounding flex
+     column). `minmax(0, 1fr)` removes that content-driven floor so all 8
+     tracks always shrink to fit whatever size this box actually is. */
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-rows: repeat(8, minmax(0, 1fr));
+  /* Sized to be the dominant element on an iPhone-width viewport (99vw)
+     while staying capped for desktop (640px). The second term is a
+     height-driven safety bound for short/landscape viewports, where a
+     square board is height-bound rather than width-bound (portrait is the
+     opposite - width is the binding term there, so this term is normally
+     just a generous, non-binding ceiling and portrait sizing is
+     unaffected). `10rem` reserves room for the header/status/controls
+     stack this board always shares a column with (verified against the
+     actual rendered chrome, not a guess) so they stay on-screen instead of
+     being pushed below the viewport - not a device-specific pixel value,
+     since it scales with `dvh` rather than naming any one screen size. */
+  width: min(99vw, calc(100dvh - 10rem), 640px);
   aspect-ratio: 1 / 1;
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   touch-action: manipulation;
+  /* Lets .square below size its glyphs off this element's own resolved
+     width (`cqw`) instead of the raw viewport - the actual root cause of
+     the landscape overflow: at `78dvh`-style sizing, this box can be far
+     narrower than the viewport, and a viewport-relative font-size doesn't
+     know that. */
+  container-type: inline-size;
 }
 
 /* Row wrapper exists only for ARIA grid semantics (role="row" grouping the
@@ -26,7 +55,24 @@
   border: none;
   padding: 0;
   cursor: pointer;
-  font-size: clamp(1.5rem, 6vw, 2.6rem);
+  /* Relative to .board's own resolved width (see its `container-type`),
+     not the viewport - a glyph sized off raw viewport width doesn't know
+     when .board itself has been sized down by the `dvh` term above (short
+     /landscape viewports), which is what let pieces outgrow their own
+     shrunk square there. 6.5cqw mirrors the previous 6.5vw numerically:
+     the board is ~99vw in the normal (width-bound, portrait) case, so this
+     is a near-identical size there and now also correctly scales down
+     wherever the board itself is smaller than that.
+     The outer `min(..., 10cqw)` bounds the inner clamp's own `1.5rem`
+     floor, which is otherwise a fixed 24px regardless of board size: once
+     the board is small enough that a square (12.5cqw each, 8 to a board)
+     drops under ~24px, that fixed floor stops shrinking with it and a
+     piece can end up wider than its own square. 10cqw is comfortably
+     under one square's own 12.5cqw width at every board size, so this
+     applies only where the fixed floor would otherwise have won (a board
+     under ~192px) - normal portrait/desktop sizing (driven by the 6.5cqw
+     preferred term well above this cap there) is unaffected. */
+  font-size: min(clamp(1.5rem, 6.5cqw, 3rem), 10cqw);
   line-height: 1;
 }
 
@@ -55,6 +101,19 @@
   inset: 0;
   background: var(--color-highlight);
   opacity: 0.6;
+}
+
+/* The opponent engine's last successfully applied move (Play Computer
+   only). Declared after .lastMove so it wins outright when both would
+   apply to the same square (a single element has only one ::after, so this
+   is source-order precedence, not a colour blend) - see the comment where
+   this class is assigned in Board.tsx. A background tint only: it never
+   covers the piece itself, which stacks above via .piece's z-index. */
+.computerMove::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--color-computer-move);
 }
 
 .check::after {
@@ -87,12 +146,48 @@
 .piece {
   position: relative;
   z-index: 1;
-  color: #111;
-  filter: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.35));
+  /* Unicode chess glyphs are single-colour outlines with no fill baked in
+     by the font, so a plain dark `color` alone (the previous approach)
+     left white pieces reading as a thin, low-contrast outline on the light
+     squares - a real legibility problem on a small mobile screen. A
+     text-stroke rim plus an opposite-toned fill (below, behind @supports)
+     gives both colours a genuinely solid, high-contrast piece silhouette
+     against either square colour; this base rule is the fallback for a
+     browser without text-stroke support - a 4-directional dark halo via
+     text-shadow, which is universally supported, so white pieces still get
+     some silhouette against light squares even there. */
+  color: #f7f7f2;
+  text-shadow:
+    -1px -1px 0 #1a1a1a,
+    1px -1px 0 #1a1a1a,
+    -1px 1px 0 #1a1a1a,
+    1px 1px 0 #1a1a1a;
 }
 
 .piece[data-colour='black'] {
-  color: #000;
+  color: #111;
+  text-shadow:
+    -1px -1px 0 rgba(255, 255, 255, 0.55),
+    1px -1px 0 rgba(255, 255, 255, 0.55),
+    -1px 1px 0 rgba(255, 255, 255, 0.55),
+    1px 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+/* Modern WebKit/Blink (Safari, Chrome - the project's actual targets)
+   support text-stroke, which paints a cleaner, crisper rim than the
+   text-shadow halo above - use it where available and drop the shadow so
+   the two effects don't stack. */
+@supports (-webkit-text-stroke: 1px black) {
+  .piece {
+    text-shadow: none;
+    -webkit-text-stroke: 1.4px #1a1a1a;
+    paint-order: stroke fill;
+  }
+
+  .piece[data-colour='black'] {
+    text-shadow: none;
+    -webkit-text-stroke: 1px rgba(255, 255, 255, 0.55);
+  }
 }
 
 .promotionOverlay {

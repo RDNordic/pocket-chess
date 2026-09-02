@@ -22,6 +22,11 @@ const DEFAULT_MOVETIME_MS = 1000;
  */
 export type ComputerGamePhase = 'player-turn' | 'computer-thinking' | 'game-over' | 'engine-error';
 
+/** From/to squares of the engine's most recently *successfully applied*
+ * move - reuses `GameStateSnapshot['lastMove']`'s own shape rather than
+ * defining a parallel one. */
+export type LastComputerMove = NonNullable<GameStateSnapshot['lastMove']>;
+
 const ENGINE_UNAVAILABLE_MESSAGE = 'The computer opponent ran into a problem.';
 const ILLEGAL_ENGINE_MOVE_MESSAGE = 'The computer proposed a move that could not be applied.';
 
@@ -83,6 +88,14 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
   );
   const [engineError, setEngineError] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
+  // The engine's most recently *successfully applied* move (for the "last
+  // computer move" board highlight) - set only where the engine's proposed
+  // move has already passed `game.applyUciMove()`'s validation below, never
+  // from raw engine output. Starts `null` and stays that way until the
+  // first such move; this hook is recreated fresh per computer-game
+  // session (see the class doc comment), so a new game/session already
+  // gets a `null` starting value with no extra clearing logic needed.
+  const [lastComputerMove, setLastComputerMove] = useState<LastComputerMove | null>(null);
 
   /** Disposes whatever engine is currently live for this session (if any)
    * and bumps the session token, so nothing further - a late response, a
@@ -130,6 +143,7 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
           return;
         }
 
+        setLastComputerMove({ from: applied.from, to: applied.to });
         const nextSnapshot = game.getSnapshot();
         setSnapshot(nextSnapshot);
         if (nextSnapshot.outcome.status === 'in-progress') {
@@ -285,6 +299,7 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
     phase,
     engineError,
     isRetrying,
+    lastComputerMove,
     selectSquare,
     move,
     retry,

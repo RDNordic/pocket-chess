@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChessGame } from '../../../chess/ChessGame';
@@ -116,5 +116,132 @@ describe('Board promotion flow', () => {
     // The pawn never moved - promotion was cancelled.
     expect(screen.getByRole('gridcell', { name: /^e7,.*white pawn/i })).toBeInTheDocument();
     expect(destinationSquare).toHaveFocus();
+  });
+});
+
+describe('Board last-computer-move highlight', () => {
+  const lastComputerMove = { from: 'e7', to: 'e5' } as const;
+
+  function snapshotAfterE4E5(): GameStateSnapshot {
+    const game = new ChessGame();
+    game.applyMove({ from: 'e2', to: 'e4' });
+    game.applyMove({ from: 'e7', to: 'e5' });
+    return game.getSnapshot();
+  }
+
+  it('marks exactly the from/to squares of the given move, not other occupied squares', () => {
+    render(
+      <Board
+        snapshot={snapshotAfterE4E5()}
+        orientation="white"
+        legalTargets={[]}
+        selectedSquare={null}
+        lastComputerMove={lastComputerMove}
+        onSelectSquare={() => {}}
+        onMove={() => {}}
+        requiresPromotion={() => false}
+      />,
+    );
+
+    expect(
+      screen.getByRole('gridcell', { name: /^e7,.*computer's last move/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('gridcell', { name: /^e5,.*computer's last move/i }),
+    ).toBeInTheDocument();
+    // e4 (the player's own move destination) has a piece but is not part of
+    // the computer's move, so it must not carry the highlight.
+    expect(screen.getByRole('gridcell', { name: /^e4,/i })).not.toHaveAccessibleName(
+      /computer's last move/i,
+    );
+  });
+
+  it('does not render the highlight when no computer move has happened yet', () => {
+    render(
+      <Board
+        snapshot={snapshotAfterE4E5()}
+        orientation="white"
+        legalTargets={[]}
+        selectedSquare={null}
+        lastComputerMove={null}
+        onSelectSquare={() => {}}
+        onMove={() => {}}
+        requiresPromotion={() => false}
+      />,
+    );
+
+    // "computer's last move" only ever appears inside a gridcell's
+    // aria-label, never as rendered text content - queryByText would never
+    // find it regardless of whether the highlight were (incorrectly)
+    // present, making that assertion vacuously true. queryByRole's `name`
+    // matches the computed accessible name (aria-label included), so this
+    // genuinely fails if any square is ever mislabelled as the computer's
+    // last move here.
+    expect(
+      screen.queryByRole('gridcell', { name: /computer's last move/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('highlights the same logical squares regardless of board orientation (flip-invariant)', () => {
+    const snapshot = snapshotAfterE4E5();
+    const { rerender } = render(
+      <Board
+        snapshot={snapshot}
+        orientation="white"
+        legalTargets={[]}
+        selectedSquare={null}
+        lastComputerMove={lastComputerMove}
+        onSelectSquare={() => {}}
+        onMove={() => {}}
+        requiresPromotion={() => false}
+      />,
+    );
+    expect(
+      screen.getByRole('gridcell', { name: /^e7,.*computer's last move/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('gridcell', { name: /^e5,.*computer's last move/i }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <Board
+        snapshot={snapshot}
+        orientation="black"
+        legalTargets={[]}
+        selectedSquare={null}
+        lastComputerMove={lastComputerMove}
+        onSelectSquare={() => {}}
+        onMove={() => {}}
+        requiresPromotion={() => false}
+      />,
+    );
+    // Same logical squares (e7/e5) still carry the highlight after flipping
+    // - only their position within the rendered grid changed.
+    expect(
+      screen.getByRole('gridcell', { name: /^e7,.*computer's last move/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('gridcell', { name: /^e5,.*computer's last move/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('a highlighted square remains clickable/selectable', async () => {
+    const user = userEvent.setup();
+    const onSelectSquare = vi.fn();
+    render(
+      <Board
+        snapshot={snapshotAfterE4E5()}
+        orientation="white"
+        legalTargets={[]}
+        selectedSquare={null}
+        lastComputerMove={lastComputerMove}
+        onSelectSquare={onSelectSquare}
+        onMove={() => {}}
+        requiresPromotion={() => false}
+      />,
+    );
+
+    await user.click(screen.getByRole('gridcell', { name: /^e5,.*computer's last move/i }));
+    expect(onSelectSquare).toHaveBeenCalledWith('e5');
   });
 });

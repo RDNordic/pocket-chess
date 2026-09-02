@@ -224,6 +224,101 @@ describe('useComputerGame', () => {
     expect(result.current.snapshot.history).toHaveLength(0);
   });
 
+  describe('lastComputerMove (last-computer-move board highlight state)', () => {
+    it('is null until the engine has ever successfully moved', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      expect(result.current.lastComputerMove).toBeNull();
+    });
+
+    it('is set to the from/to of a successfully applied computer move', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      act(() => result.current.move('e2', 'e4'));
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
+      act(() => engines[0].resolveMove('e7e5'));
+
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+      expect(result.current.lastComputerMove).toEqual({ from: 'e7', to: 'e5' });
+    });
+
+    it('updates to the newer move once the engine replies again', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      act(() => result.current.move('e2', 'e4'));
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
+      act(() => engines[0].resolveMove('e7e5'));
+      await waitFor(() => expect(result.current.lastComputerMove).toEqual({ from: 'e7', to: 'e5' }));
+
+      act(() => result.current.move('g1', 'f3'));
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(2));
+      act(() => engines[0].resolveMove('b8c6'));
+
+      await waitFor(() => expect(result.current.lastComputerMove).toEqual({ from: 'b8', to: 'c6' }));
+    });
+
+    it('an illegal/rejected engine move never sets the highlight', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      act(() => result.current.move('e2', 'e4'));
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
+      act(() => engines[0].resolveMove('b1b3'));
+
+      await waitFor(() => expect(result.current.phase).toBe('engine-error'));
+      expect(result.current.lastComputerMove).toBeNull();
+    });
+
+    it('a failed engine search never sets the highlight', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      act(() => result.current.move('e2', 'e4'));
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
+      act(() => engines[0].rejectMove(new Error('engine worker error')));
+
+      await waitFor(() => expect(result.current.phase).toBe('engine-error'));
+      expect(result.current.lastComputerMove).toBeNull();
+    });
+
+    it('a stale response from an abandoned (unmounted) game never sets the highlight', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result, unmount } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      act(() => result.current.move('e2', 'e4'));
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
+      expect(result.current.lastComputerMove).toBeNull();
+
+      unmount();
+      // The abandoned engine's reply finally arrives after teardown - it
+      // must not retroactively populate the highlight (or do anything else
+      // observable; see the equivalent full-game-state assertion above).
+      act(() => engines[0].resolveMove('e7e5'));
+      expect(result.current.lastComputerMove).toBeNull();
+    });
+
+    it('a new game/session starts with no computer-move highlight', () => {
+      const { createEngine } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      expect(result.current.lastComputerMove).toBeNull();
+    });
+  });
+
   it('retry() disposes the failed engine, starts a fresh one, and can complete the pending move', async () => {
     const { createEngine, engines } = engineFactory();
     const { result } = renderHook(() => useComputerGame('black', { createEngine }));
