@@ -170,7 +170,16 @@ describe('Board last-computer-move highlight', () => {
       />,
     );
 
-    expect(screen.queryByText(/computer's last move/i)).not.toBeInTheDocument();
+    // "computer's last move" only ever appears inside a gridcell's
+    // aria-label, never as rendered text content - queryByText would never
+    // find it regardless of whether the highlight were (incorrectly)
+    // present, making that assertion vacuously true. queryByRole's `name`
+    // matches the computed accessible name (aria-label included), so this
+    // genuinely fails if any square is ever mislabelled as the computer's
+    // last move here.
+    expect(
+      screen.queryByRole('gridcell', { name: /computer's last move/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('highlights the same logical squares regardless of board orientation (flip-invariant)', () => {
