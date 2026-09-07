@@ -14,8 +14,16 @@ test('play computer as White: player moves, the real engine replies, and control
 
   // Picks a non-default difficulty before starting - confirms the
   // selector reaches the game session (build spec phase 3A), not just
-  // that the default flow (covered by the Black test below) works.
-  await page.getByRole('radio', { name: 'Casual' }).click();
+  // that the default flow (covered by the Black test below) works. Clicks
+  // the visible label text (what a real pointer user clicks), not the
+  // `role=radio` locator directly - the underlying `<input>` is visually
+  // hidden by design (see ColourSelectScreen.module.css), so a literal
+  // pointer click can only ever land on its label.
+  await page
+    .getByRole('radiogroup', { name: /computer difficulty/i })
+    .getByText('Casual', { exact: true })
+    .click();
+  await expect(page.getByRole('radio', { name: 'Casual' })).toBeChecked();
   await page.getByRole('button', { name: /play as white/i }).click();
   await expect(page.getByText(/white to move/i)).toBeVisible();
   await expect(page.getByText('Casual')).toBeVisible();
@@ -33,6 +41,24 @@ test('play computer as White: player moves, the real engine replies, and control
   // (the engine) picked is deliberately not asserted.
   await expect(page.getByText(/white to move/i)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('gridcell', { name: /^e2(,|$)/ })).toBeEnabled();
+});
+
+test('difficulty selector: arrow-key selection reaches the game session', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /play computer/i }).click();
+
+  // `locator.focus()` doesn't require visibility (unlike `.click()`) - the
+  // radio input is intentionally visually hidden, so this is the right way
+  // to move real keyboard focus onto it for this test, matching what a
+  // Tab keypress from earlier in the page would land on.
+  await page.getByRole('radio', { name: 'Gentle' }).focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('radio', { name: 'Challenging' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Gentle' })).not.toBeChecked();
+
+  await page.getByRole('button', { name: /play as black/i }).click();
+  await expect(page.getByText('Challenging')).toBeVisible();
 });
 
 test('play computer as Black: the real engine moves first automatically', async ({ page }) => {

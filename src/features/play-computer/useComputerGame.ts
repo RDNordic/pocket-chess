@@ -72,7 +72,23 @@ export interface UseComputerGameOptions {
 export function useComputerGame(playerColour: PlayerColour, options: UseComputerGameOptions = {}) {
   const createEngine = options.createEngine ?? (() => new StockfishAdapter());
   const movetimeMs = options.movetimeMs ?? DEFAULT_MOVETIME_MS;
-  const sessionConfig = options.sessionConfig ?? DEFAULT_SESSION_CONFIG;
+
+  // Snapshotted once, on the first render, into a ref rather than read
+  // fresh from `options` on every render/callback rebuild - this hook's
+  // lifetime is one computer-game session (see the class doc comment) and
+  // difficulty is fixed for the whole session (build spec section 14), so
+  // neither a later `sessionConfig` prop change nor the caller mutating the
+  // same config object in place after mount may change what `retry()`
+  // starts with. The shallow copy is what defeats in-place mutation of the
+  // caller-owned object; `EngineSessionConfig` currently has only the one
+  // primitive `difficulty` field, so a shallow copy is a full snapshot. A
+  // different difficulty requires a new session (a fresh mount), not a
+  // prop update on this one.
+  const sessionConfigRef = useRef<EngineSessionConfig | null>(null);
+  if (sessionConfigRef.current === null) {
+    sessionConfigRef.current = { ...(options.sessionConfig ?? DEFAULT_SESSION_CONFIG) };
+  }
+  const sessionConfig = sessionConfigRef.current;
 
   // Lazily constructed once, like useLocalGame's gameRef - this hook's
   // lifetime is one computer-game session (see the class doc comment), so

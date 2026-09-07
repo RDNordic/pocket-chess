@@ -42,6 +42,10 @@
 
 .difficultyChoice,
 .difficultyChoiceSelected {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 36px;
   padding: 0 0.75rem;
   border-radius: 999px;
@@ -49,11 +53,40 @@
   font-size: 0.85rem;
   background: var(--color-surface);
   color: var(--color-text);
+  cursor: pointer;
 }
 
 .difficultyChoiceSelected {
   border-color: var(--color-accent, currentColor);
   font-weight: 600;
+}
+
+/* Visible keyboard focus on the pill itself (native radio input is
+   visually hidden below but stays focusable/operable) - :focus-within
+   lights up whenever its hidden input has keyboard focus. Not gated on
+   :focus-visible since the input itself has no visual affordance of its
+   own to fall back on for a mouse/touch focus - the pill's own
+   hover/selected styling already covers pointer interaction. */
+.difficultyChoice:focus-within,
+.difficultyChoiceSelected:focus-within {
+  outline: 2px solid var(--color-accent, currentColor);
+  outline-offset: 2px;
+}
+
+/* Visually hidden but still in the tab order and operable by keyboard -
+   native <input type="radio"> gives arrow-key movement between options and
+   a single group tab-stop for free; only its own paint is hidden here, in
+   favour of the enclosing <label> pill's compact appearance. */
+.difficultyRadioInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .actions {

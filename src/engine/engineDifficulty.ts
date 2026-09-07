@@ -20,12 +20,27 @@ export const SKILL_LEVEL_BY_DIFFICULTY: Readonly<Record<EngineDifficulty, number
 };
 
 /** Resolves `difficulty` to its `Skill Level` value. Throws `EngineError`
- * for anything not in `SKILL_LEVEL_BY_DIFFICULTY` - a malformed runtime
+ * for anything not a genuine, own entry of `SKILL_LEVEL_BY_DIFFICULTY` whose
+ * value is itself a valid Skill Level number - a malformed runtime
  * configuration (e.g. a bad value smuggled past TypeScript via `as any`)
- * must never silently fall back to a default strength. */
+ * must never silently fall back to a default strength.
+ *
+ * Deliberately does not use plain `SKILL_LEVEL_BY_DIFFICULTY[difficulty]`
+ * indexing followed by an `undefined` check: `difficulty` can be an
+ * arbitrary string at runtime, and indexing a plain object with an
+ * inherited property name (`"toString"`, `"constructor"`, `"__proto__"`,
+ * `"hasOwnProperty"`, ...) resolves through the prototype chain to a
+ * function, not `undefined` - silently passing validation and handing a
+ * function where a number is required. `Object.hasOwn` first, then a
+ * `typeof`/finiteness check on the resolved value, closes both that hole
+ * and any future one where a mapping entry itself is accidentally not a
+ * finite number. */
 export function skillLevelForDifficulty(difficulty: EngineDifficulty): number {
+  if (!Object.hasOwn(SKILL_LEVEL_BY_DIFFICULTY, difficulty)) {
+    throw new EngineError(`invalid engine difficulty: "${String(difficulty)}"`);
+  }
   const skillLevel = SKILL_LEVEL_BY_DIFFICULTY[difficulty];
-  if (skillLevel === undefined) {
+  if (typeof skillLevel !== 'number' || !Number.isFinite(skillLevel)) {
     throw new EngineError(`invalid engine difficulty: "${String(difficulty)}"`);
   }
   return skillLevel;

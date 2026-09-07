@@ -776,6 +776,22 @@ describe('StockfishAdapter engine difficulty / capability validation', () => {
     expect(worker.sent).toEqual([]);
   });
 
+  it('rejects an inherited Object.prototype property name as a difficulty before any Worker/UCI activity', async () => {
+    const worker = new FakeWorker();
+    const adapter = new StockfishAdapter({ workerFactory: () => worker });
+
+    // "constructor" resolves through the prototype chain on a naive
+    // `mapping[difficulty]` lookup - must still be rejected, and rejected
+    // before the Worker is ever created (workerFactory is never called, so
+    // `worker` above stays entirely untouched).
+    await expect(adapter.start({ difficulty: 'constructor' as never })).rejects.toThrow(
+      /invalid engine difficulty/,
+    );
+    expect(adapter.state).toBe('error');
+    expect(worker.sent).toEqual([]);
+    expect(worker.terminated).toBe(false);
+  });
+
   it('capability collection does not leak across Worker generations: generation 2 is validated purely against its own advertisement', async () => {
     const { workerFactory, spawned } = trackedWorkerFactory();
     const adapter = new StockfishAdapter({

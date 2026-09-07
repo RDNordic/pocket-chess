@@ -37,7 +37,7 @@ quick reference:
   etc.) without verifying they're genuinely required against real build
   output/browser behaviour first.
 
-## Current architecture (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + release hygiene + Phase 2A + Phase 2B + Phase 3A)
+## Current architecture (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + release hygiene + Phase 2A + Phase 2B; Phase 3A implemented on a branch, pending review - see below)
 
 ```text
 src/
@@ -146,9 +146,15 @@ A narrowly scoped production bug fix followed Phase 2B: production
 `script-src 'self'`, so `public/_headers`'s CSP now reads `script-src
 'self' 'wasm-unsafe-eval'` - the minimal WebAssembly-compilation
 allowance, not the broader `unsafe-eval`.
-Phase 3A (adjustable bot strength) is done: a **provisional**, scoped-down
-slice of build spec Phase 3 - only Stockfish's `Skill Level` UCI option
-(`UCI_LimitStrength` explicitly `false`), no `UCI_Elo`/rating estimation.
+Phase 3A (adjustable bot strength) is implemented and passes all automated
+checks (`npm test`/`npm run lint`/`npm run build`/`npm run test:engine`/
+`npm run test:e2e`) on branch `feature/phase-3a-bot-strength`, **pending
+independent review and a real-iPhone/offline acceptance check before it
+merges to `main`** - do not treat it as accepted or read this as covering
+the rest of build spec Phase 3 (see the Phase 3B entry in next-steps.md).
+A **provisional**, scoped-down slice of build spec Phase 3 - only
+Stockfish's `Skill Level` UCI option (`UCI_LimitStrength` explicitly
+`false`), no `UCI_Elo`/rating estimation.
 `ChessEngine.start()` takes an optional `EngineSessionConfig`, validated
 and snapshotted once; `StockfishAdapter` parses the engine's advertised
 `Skill Level`/`UCI_LimitStrength` capabilities out of its `uci` response,

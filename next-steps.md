@@ -38,9 +38,17 @@ UI rather than inferring it from disabled buttons. One fixed search time
 (1000ms) - no difficulty UI yet, that is Phase 3. Local two-player is
 unchanged.
 
-## Phase 3A: adjustable bot strength - done
+## Phase 3A: adjustable bot strength - implemented, pending review
 
-Reference: pocket-chess-build-spec.md section 14. A scoped-down slice of
+Reference: pocket-chess-build-spec.md section 14. Implemented and passing
+all automated checks (`npm test`/`npm run lint`/`npm run build`/
+`npm run test:engine`/`npm run test:e2e`) on branch
+`feature/phase-3a-bot-strength` - **not yet merged to `main`**. Still
+outstanding before this slice can be called done: independent (Codex)
+review/GO, and the physical-iPhone + offline acceptance check (this slice
+has only been checked in an emulated mobile viewport and against the
+production build locally, not on real hardware or with the network
+disabled). This is a scoped-down slice of
 Phase 3 - only the Stockfish `Skill Level` UCI option (`UCI_LimitStrength`
 explicitly `false`), not `UCI_Elo`/rating estimation. Four **provisional**
 presets (`gentle`=0, `casual`=5, `challenging`=10, `strongest`=20 - see
@@ -71,7 +79,8 @@ allowance, not the broader `unsafe-eval`. No other CSP directive changed.
 - Phase 3B: the rest of build spec Phase 3 - player Elo
   estimation/rating display, undo/resign/restart polish for the
   computer-game flow, random colour selection. (Skill Level difficulty is
-  done - see Phase 3A above.)
+  implemented pending review, not merged - see Phase 3A above. Phase 3B
+  should not start until Phase 3A is reviewed and merged.)
 - Phase 4: IndexedDB persistence (settings, games, puzzle progress).
 - Phase 5: puzzle pipeline (Lichess CC0 dataset preprocessing script,
   ~5,000 bundled puzzles, puzzle session logic).

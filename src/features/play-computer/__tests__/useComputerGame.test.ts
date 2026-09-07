@@ -522,5 +522,67 @@ describe('useComputerGame', () => {
       await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
       expect(engines[0].findBestMoveCalls[0].fen).toBe(START_FEN);
     });
+
+    it('rerendering with a different sessionConfig does not change what retry() starts with', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result, rerender } = renderHook(
+        ({ sessionConfig }: { sessionConfig: EngineSessionConfig }) =>
+          useComputerGame('black', { createEngine, sessionConfig }),
+        { initialProps: { sessionConfig: { difficulty: 'gentle' } } },
+      );
+
+      act(() => engines[0].rejectStart(new Error('boom')));
+      await waitFor(() => expect(result.current.phase).toBe('engine-error'));
+      expect(engines[0].startConfigs[0]).toEqual({ difficulty: 'gentle' });
+
+      // A later render supplies a different sessionConfig - the session was
+      // already established at mount with 'gentle' and must not pick this
+      // up mid-session.
+      rerender({ sessionConfig: { difficulty: 'strongest' } });
+
+      act(() => result.current.retry());
+      await waitFor(() => expect(engines[1].startConfigs).toHaveLength(1));
+      expect(engines[1].startConfigs[0]).toEqual({ difficulty: 'gentle' });
+    });
+
+    it('mutating the caller-owned sessionConfig object in place does not change what retry() starts with', async () => {
+      const { createEngine, engines } = engineFactory();
+      const sessionConfig: EngineSessionConfig = { difficulty: 'gentle' };
+      const { result } = renderHook(() => useComputerGame('black', { createEngine, sessionConfig }));
+
+      act(() => engines[0].rejectStart(new Error('boom')));
+      await waitFor(() => expect(result.current.phase).toBe('engine-error'));
+      expect(engines[0].startConfigs[0]).toEqual({ difficulty: 'gentle' });
+
+      // Mutates the exact object reference the hook was given, after the
+      // hook already snapshotted its value.
+      sessionConfig.difficulty = 'strongest';
+
+      act(() => result.current.retry());
+      await waitFor(() => expect(engines[1].startConfigs).toHaveLength(1));
+      expect(engines[1].startConfigs[0]).toEqual({ difficulty: 'gentle' });
+    });
+
+    it('a fresh session (a new hook instance) can use a different difficulty than a previous one', async () => {
+      const first = engineFactory();
+      renderHook(() =>
+        useComputerGame('white', {
+          createEngine: first.createEngine,
+          sessionConfig: { difficulty: 'gentle' },
+        }),
+      );
+      await waitFor(() => expect(first.engines[0].startConfigs).toHaveLength(1));
+      expect(first.engines[0].startConfigs[0]).toEqual({ difficulty: 'gentle' });
+
+      const second = engineFactory();
+      renderHook(() =>
+        useComputerGame('white', {
+          createEngine: second.createEngine,
+          sessionConfig: { difficulty: 'strongest' },
+        }),
+      );
+      await waitFor(() => expect(second.engines[0].startConfigs).toHaveLength(1));
+      expect(second.engines[0].startConfigs[0]).toEqual({ difficulty: 'strongest' });
+    });
   });
 });

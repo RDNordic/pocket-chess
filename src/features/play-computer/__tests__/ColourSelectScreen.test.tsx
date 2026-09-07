@@ -21,7 +21,7 @@ describe('ColourSelectScreen', () => {
     const user = userEvent.setup();
     const selections = renderScreen();
 
-    expect(screen.getByRole('radio', { name: 'Gentle' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: 'Gentle' })).toBeChecked();
 
     await user.click(screen.getByRole('button', { name: /play as white/i }));
     expect(selections).toEqual([{ colour: 'white', difficulty: 'gentle' }]);
@@ -40,8 +40,8 @@ describe('ColourSelectScreen', () => {
     const selections = renderScreen();
 
     await user.click(screen.getByRole('radio', { name: 'Challenging' }));
-    expect(screen.getByRole('radio', { name: 'Challenging' })).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByRole('radio', { name: 'Gentle' })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('radio', { name: 'Challenging' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Gentle' })).not.toBeChecked();
 
     await user.click(screen.getByRole('button', { name: /play as white/i }));
     expect(selections).toEqual([{ colour: 'white', difficulty: 'challenging' }]);
@@ -53,5 +53,43 @@ describe('ColourSelectScreen', () => {
     for (const label of ['Gentle', 'Casual', 'Challenging', 'Strongest']) {
       expect(screen.getByRole('radio', { name: label })).toBeInTheDocument();
     }
+  });
+
+  describe('keyboard operation', () => {
+    it('arrow-key navigation moves selection between options and Space/click selects the focused one', async () => {
+      const user = userEvent.setup();
+      renderScreen();
+
+      // Tab from the top of the document to the radiogroup - only one tab
+      // stop for the whole group (native radio-group behaviour), landing on
+      // the currently checked option (Gentle).
+      await user.tab(); // Back button
+      await user.tab(); // radiogroup - lands on the checked radio (Gentle)
+      expect(screen.getByRole('radio', { name: 'Gentle' })).toHaveFocus();
+
+      await user.keyboard('{ArrowRight}');
+      expect(screen.getByRole('radio', { name: 'Casual' })).toHaveFocus();
+      expect(screen.getByRole('radio', { name: 'Casual' })).toBeChecked();
+
+      await user.keyboard('{ArrowRight}{ArrowRight}');
+      expect(screen.getByRole('radio', { name: 'Strongest' })).toHaveFocus();
+      expect(screen.getByRole('radio', { name: 'Strongest' })).toBeChecked();
+
+      await user.keyboard('{ArrowLeft}');
+      expect(screen.getByRole('radio', { name: 'Challenging' })).toHaveFocus();
+      expect(screen.getByRole('radio', { name: 'Challenging' })).toBeChecked();
+    });
+
+    it('a keyboard-selected difficulty is what reaches onSelect', async () => {
+      const user = userEvent.setup();
+      const selections = renderScreen();
+
+      await user.tab();
+      await user.tab();
+      await user.keyboard('{ArrowRight}{ArrowRight}'); // Gentle -> Casual -> Challenging
+
+      await user.click(screen.getByRole('button', { name: /play as black/i }));
+      expect(selections).toEqual([{ colour: 'black', difficulty: 'challenging' }]);
+    });
   });
 });

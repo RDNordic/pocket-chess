@@ -35,16 +35,20 @@ export function ColourSelectScreen({ onBack, onSelect }: ColourSelectScreenProps
       <p className={styles.prompt}>Computer difficulty</p>
       <div className={styles.difficulty} role="radiogroup" aria-label="Computer difficulty">
         {DIFFICULTY_ORDER.map((level) => (
-          <button
+          <label
             key={level}
-            type="button"
-            role="radio"
-            aria-checked={level === difficulty}
             className={level === difficulty ? styles.difficultyChoiceSelected : styles.difficultyChoice}
-            onClick={() => setDifficulty(level)}
           >
+            <input
+              type="radio"
+              name="computer-difficulty"
+              value={level}
+              checked={level === difficulty}
+              onChange={() => setDifficulty(level)}
+              className={styles.difficultyRadioInput}
+            />
             {DIFFICULTY_LABELS[level]}
-          </button>
+          </label>
         ))}
       </div>
 
