@@ -1,6 +1,12 @@
 import type { ChessEngine } from './ChessEngine';
 import { EngineError, assertValidSearchLimits } from './engineTypes';
-import type { EngineLifecycleState, EngineMove, SearchLimits } from './engineTypes';
+import type {
+  EngineLifecycleState,
+  EngineMove,
+  EngineSessionConfig,
+  SearchLimits,
+} from './engineTypes';
+import { skillLevelForDifficulty } from './engineDifficulty';
 import { parseUciLine } from './UciParser';
 
 /**
@@ -77,6 +83,20 @@ interface PendingHandshake {
   resolve(): void;
   reject(error: Error): void;
 }
+
+/** The subset of an advertised UCI `option` this adapter needs to validate
+ * capability support - see `validateCapabilities`. */
+interface EngineCapability {
+  optionType: string;
+  min?: number;
+  max?: number;
+}
+
+/** `start()`'s default when no `EngineSessionConfig` is supplied - Skill
+ * Level 20 (Stockfish's own default), so omitting a config is behaviourally
+ * identical to the pre-Phase-3A adapter, which never sent `setoption` at
+ * all. */
+const DEFAULT_SESSION_CONFIG: EngineSessionConfig = { difficulty: 'strongest' };
 
 interface PendingSearch {
   fen: string;
@@ -166,6 +186,20 @@ export class StockfishAdapter implements ChessEngine {
    * readiness promise. */
   private readyPromise: Promise<void> | null = null;
 
+  /** The `Skill Level` value snapshotted from `start()`'s `config`
+   * argument - validated and set exactly once (`start()` can only be
+   * called once, from `uninitialised`), then resent verbatim by every
+   * `performHandshake()` call for this adapter's lifetime, including every
+   * Worker-restart recovery path. */
+  private skillLevel = skillLevelForDifficulty(DEFAULT_SESSION_CONFIG.difficulty);
+
+  /** Advertised UCI options collected from the current Worker generation's
+   * `uci` -> `uciok` banner, keyed by option name. Cleared at the start of
+   * every `spawnWorker()` call (see the class doc comment's "Worker
+   * generations" section) so a restarted engine is validated purely against
+   * what it itself just advertised, never a stale prior generation's. */
+  private capabilities = new Map<string, EngineCapability>();
+
   /** The search whose `go` is currently outstanding at the engine, if any -
    * `wanted: false` once it has been stopped/superseded but its `bestmove`
    * hasn't arrived yet (still discarded when it does). */
@@ -203,12 +237,17 @@ export class StockfishAdapter implements ChessEngine {
     return this.lifecycleState;
   }
 
-  async start(): Promise<void> {
+  async start(config: EngineSessionConfig = DEFAULT_SESSION_CONFIG): Promise<void> {
     if (this.lifecycleState !== 'uninitialised') {
       throw new EngineError(`cannot start engine from state "${this.lifecycleState}"`);
     }
+    // Validated and snapshotted before any state transition - an invalid
+    // config must leave the adapter exactly where a bad `start()` call
+    // always leaves it (moved to 'error' by the catch block below), never
+    // silently fall back to a default strength.
     this.lifecycleState = 'starting';
     try {
+      this.skillLevel = skillLevelForDifficulty(config.difficulty);
       this.spawnWorker();
       await this.performHandshake();
       // A concurrent dispose() during the handshake already moved this to
@@ -241,6 +280,14 @@ export class StockfishAdapter implements ChessEngine {
     return this.readyPromise;
   }
 
+  /** `uci` -> `uciok` (collecting the option lines Stockfish sends along
+   * the way into `capabilities`), then validate those capabilities support
+   * the snapshotted `skillLevel`, then send the two `setoption` commands
+   * this adapter ever sends, then `isready` -> `readyok`. Used by both
+   * `start()` and `restartWorker()`, so every recovery path re-applies the
+   * same configured strength with no separate code path (build spec
+   * section 13: "do not change engine options during search" - this only
+   * ever runs while the adapter is not yet `ready`/`searching`). */
   private async performHandshake(): Promise<void> {
     await this.handshake(
       'uci',
@@ -251,7 +298,38 @@ export class StockfishAdapter implements ChessEngine {
         this.uciokPending = null;
       },
     );
+    this.validateCapabilities();
+    this.postCommand('setoption name UCI_LimitStrength value false');
+    this.postCommand(`setoption name Skill Level value ${this.skillLevel}`);
     await this.waitUntilReady();
+  }
+
+  /** Throws `EngineError` if the current Worker generation's advertised
+   * capabilities (collected via `handleLine`'s `option` case since the
+   * `uci` command was sent) can't support the snapshotted `skillLevel` -
+   * `Skill Level` must be an advertised `spin` option whose range includes
+   * `skillLevel`, and `UCI_LimitStrength` must be an advertised `check`
+   * option. Thrown from inside `performHandshake`, so this fails through
+   * the exact same `error`-state path as a handshake timeout or any other
+   * startup failure (see `start()`/`restartWorker()`'s `catch` blocks). */
+  private validateCapabilities(): void {
+    const skillLevelOption = this.capabilities.get('Skill Level');
+    if (!skillLevelOption || skillLevelOption.optionType !== 'spin') {
+      throw new EngineError('engine does not advertise the required "Skill Level" spin option');
+    }
+    const { min, max } = skillLevelOption;
+    if (min === undefined || max === undefined || this.skillLevel < min || this.skillLevel > max) {
+      throw new EngineError(
+        `engine's advertised "Skill Level" range [${min}, ${max}] does not include ${this.skillLevel}`,
+      );
+    }
+
+    const limitStrengthOption = this.capabilities.get('UCI_LimitStrength');
+    if (!limitStrengthOption || limitStrengthOption.optionType !== 'check') {
+      throw new EngineError(
+        'engine does not advertise the required "UCI_LimitStrength" check option',
+      );
+    }
   }
 
   /** Sends `command` and resolves/rejects once `registerPending`'s slot is
@@ -541,6 +619,9 @@ export class StockfishAdapter implements ChessEngine {
    * where a new Worker generation begins. */
   private spawnWorker(): void {
     this.workerGeneration += 1;
+    // A new generation is validated purely against what it itself
+    // advertises - see the `capabilities` field doc comment.
+    this.capabilities.clear();
     this.worker = this.workerFactory();
     this.attachWorkerCallbacks();
   }
@@ -610,6 +691,19 @@ export class StockfishAdapter implements ChessEngine {
       }
       case 'bestmove': {
         this.handleBestMove(event.move, event.ponder);
+        return;
+      }
+      case 'option': {
+        // Only the two option names this adapter ever validates/sets are
+        // worth keeping - everything else the engine advertises is simply
+        // not recorded (see `validateCapabilities`).
+        if (event.name === 'Skill Level' || event.name === 'UCI_LimitStrength') {
+          this.capabilities.set(event.name, {
+            optionType: event.optionType,
+            min: event.min,
+            max: event.max,
+          });
+        }
         return;
       }
       case 'unknown':

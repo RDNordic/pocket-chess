@@ -32,6 +32,30 @@
   color: var(--color-muted);
 }
 
+.difficulty {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  width: min(90vw, 320px);
+}
+
+.difficultyChoice,
+.difficultyChoiceSelected {
+  min-height: 36px;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-surface);
+  font-size: 0.85rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.difficultyChoiceSelected {
+  border-color: var(--color-accent, currentColor);
+  font-weight: 600;
+}
+
 .actions {
   display: flex;
   flex-direction: column;

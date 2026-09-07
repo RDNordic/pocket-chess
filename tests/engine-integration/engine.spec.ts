@@ -3,10 +3,12 @@ import { ChessGame } from '../../src/chess/ChessGame';
 
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
+type EngineDifficulty = 'gentle' | 'casual' | 'challenging' | 'strongest';
+
 declare global {
   interface Window {
     __pocketChessEngineHarness: {
-      start(): Promise<void>;
+      start(config?: { difficulty: EngineDifficulty }): Promise<void>;
       findBestMove(
         fen: string,
         limits: { movetimeMs: number },
@@ -82,4 +84,44 @@ test.describe('real Stockfish engine (Web Worker + WASM)', () => {
       await page.evaluate(() => window.__pocketChessEngineHarness.dispose()).catch(() => {});
     }
   });
+
+  const DIFFICULTIES: readonly EngineDifficulty[] = ['gentle', 'casual', 'challenging', 'strongest'];
+
+  for (const difficulty of DIFFICULTIES) {
+    test(`difficulty "${difficulty}": the real engine's advertised capabilities support it and it returns a legal move`, async ({
+      page,
+    }) => {
+      await page.goto('/tests/engine-integration/engine-harness.html');
+
+      try {
+        // start() resolves only once the real engine has advertised the
+        // "Skill Level"/"UCI_LimitStrength" capabilities this preset needs
+        // and completed the isready/readyok handshake after configuring
+        // them (build spec section 14) - a real, unmocked capability check
+        // against the vendored Stockfish 18 Lite WASM build.
+        await page.evaluate(
+          ([selectedDifficulty]) =>
+            window.__pocketChessEngineHarness.start({ difficulty: selectedDifficulty }),
+          [difficulty],
+        );
+        const stateAfterStart = await page.evaluate(() =>
+          window.__pocketChessEngineHarness.getState(),
+        );
+        expect(stateAfterStart).toBe('ready');
+
+        const move = await page.evaluate(
+          ([fen]) => window.__pocketChessEngineHarness.findBestMove(fen, { movetimeMs: 300 }),
+          [START_FEN],
+        );
+
+        // No exact-move or calibrated-strength assertion - only that the
+        // move is well-formed UCI and legal in the position.
+        expect(move.uci).toMatch(/^[a-h][1-8][a-h][1-8][qrbn]?$/);
+        const game = new ChessGame(START_FEN);
+        expect(game.applyUciMove(move.uci)).not.toBeNull();
+      } finally {
+        await page.evaluate(() => window.__pocketChessEngineHarness.dispose()).catch(() => {});
+      }
+    });
+  }
 });

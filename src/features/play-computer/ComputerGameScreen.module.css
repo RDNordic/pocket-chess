@@ -38,6 +38,16 @@
   margin: 0;
 }
 
+.difficultyBadge {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  border: 1px solid var(--color-surface);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  white-space: nowrap;
+}
+
 .status {
   margin: 0;
   color: var(--color-muted);

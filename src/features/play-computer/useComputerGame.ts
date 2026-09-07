@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChessGame } from '../../chess/ChessGame';
 import type { GameStateSnapshot, PlayerColour, PromotionPiece, SquareId } from '../../chess/chessTypes';
 import type { ChessEngine } from '../../engine/ChessEngine';
+import type { EngineSessionConfig } from '../../engine/engineTypes';
 import { StockfishAdapter } from '../../engine/StockfishAdapter';
 
 /**
@@ -11,6 +12,13 @@ import { StockfishAdapter } from '../../engine/StockfishAdapter';
  * later phase (build spec section 14) - this is not exposed to the UI.
  */
 const DEFAULT_MOVETIME_MS = 1000;
+
+/** `useComputerGame`'s own default when no `sessionConfig` is supplied -
+ * mirrors `StockfishAdapter`'s default, so a caller that doesn't think
+ * about difficulty gets the same full-strength behaviour as before Phase
+ * 3A. The UI layer (`ColourSelectScreen`) is what actually defaults new
+ * games to `'gentle'` - this hook has no opinion on that. */
+const DEFAULT_SESSION_CONFIG: EngineSessionConfig = { difficulty: 'strongest' };
 
 /**
  * Explicit computer-game phase - the player's turn, the engine searching,
@@ -36,6 +44,12 @@ export interface UseComputerGameOptions {
   createEngine?: () => ChessEngine;
   /** Overrides `DEFAULT_MOVETIME_MS`. Exposed for tests. */
   movetimeMs?: number;
+  /** The engine difficulty for this session, passed through to
+   * `ChessEngine.start()`. Fixed for the hook's whole lifetime (one hook
+   * instance is one computer-game session) - `retry()` re-uses the same
+   * value, it is never re-read from a changed prop mid-session. Defaults to
+   * `DEFAULT_SESSION_CONFIG` ('strongest') when omitted. */
+  sessionConfig?: EngineSessionConfig;
 }
 
 /**
@@ -58,6 +72,7 @@ export interface UseComputerGameOptions {
 export function useComputerGame(playerColour: PlayerColour, options: UseComputerGameOptions = {}) {
   const createEngine = options.createEngine ?? (() => new StockfishAdapter());
   const movetimeMs = options.movetimeMs ?? DEFAULT_MOVETIME_MS;
+  const sessionConfig = options.sessionConfig ?? DEFAULT_SESSION_CONFIG;
 
   // Lazily constructed once, like useLocalGame's gameRef - this hook's
   // lifetime is one computer-game session (see the class doc comment), so
@@ -176,7 +191,7 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
 
     const engine = createEngine();
     engineRef.current = engine;
-    const startPromise = engine.start();
+    const startPromise = engine.start(sessionConfig);
     startPromiseRef.current = startPromise;
 
     try {
@@ -204,7 +219,7 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
       setPhase('engine-error');
       setEngineError(ENGINE_UNAVAILABLE_MESSAGE);
     }
-  }, [createEngine, game, playerColour, requestComputerMove, disposeCurrentEngine]);
+  }, [createEngine, game, playerColour, requestComputerMove, disposeCurrentEngine, sessionConfig]);
 
   useEffect(() => {
     mountedRef.current = true;

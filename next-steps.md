@@ -38,6 +38,26 @@ UI rather than inferring it from disabled buttons. One fixed search time
 (1000ms) - no difficulty UI yet, that is Phase 3. Local two-player is
 unchanged.
 
+## Phase 3A: adjustable bot strength - done
+
+Reference: pocket-chess-build-spec.md section 14. A scoped-down slice of
+Phase 3 - only the Stockfish `Skill Level` UCI option (`UCI_LimitStrength`
+explicitly `false`), not `UCI_Elo`/rating estimation. Four **provisional**
+presets (`gentle`=0, `casual`=5, `challenging`=10, `strongest`=20 - see
+`src/engine/engineDifficulty.ts`, the one file holding this mapping),
+chosen after verifying locally which UCI options the vendored Stockfish 18
+Lite build actually advertises (spin `Skill Level` 0-20, check
+`UCI_LimitStrength`) rather than inventing any. `ChessEngine.start()` now
+takes an optional `EngineSessionConfig`; `StockfishAdapter` validates the
+engine's advertised capabilities and sends `setoption` for both options
+after `uciok` and before `isready`/`readyok`, on both the initial handshake
+and every Worker-restart recovery path, so the selected strength survives
+recovery without any separate code path. The pre-game colour-select screen
+(`ColourSelectScreen`) now also picks a difficulty (default Gentle for new
+games), fixed for the session; a compact badge in `ComputerGameScreen`
+shows the active label. Still deferred to a later Phase 3B: random colour
+selection, undo/resign/restart, and any player-facing rating estimate.
+
 ## Production bug fix: WASM blocked by CSP - done
 
 Production (unlike local validation) blocked `WebAssembly.instantiate()`
@@ -48,9 +68,10 @@ allowance, not the broader `unsafe-eval`. No other CSP directive changed.
 
 ## Deferred (do not start yet)
 
-- Phase 3: engine difficulty levels (Skill Level/UCI_LimitStrength UI),
-  player Elo estimation, undo/resign/restart polish for the computer-game
-  flow, random colour selection.
+- Phase 3B: the rest of build spec Phase 3 - player Elo
+  estimation/rating display, undo/resign/restart polish for the
+  computer-game flow, random colour selection. (Skill Level difficulty is
+  done - see Phase 3A above.)
 - Phase 4: IndexedDB persistence (settings, games, puzzle progress).
 - Phase 5: puzzle pipeline (Lichess CC0 dataset preprocessing script,
   ~5,000 bundled puzzles, puzzle session logic).

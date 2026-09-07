@@ -1,13 +1,18 @@
-import type { EngineLifecycleState, EngineMove, SearchLimits } from './engineTypes';
+import type {
+  EngineLifecycleState,
+  EngineMove,
+  EngineSessionConfig,
+  SearchLimits,
+} from './engineTypes';
 
 /**
  * The only surface the rest of the application is allowed to depend on for
  * computer moves. Every UCI/Worker/Stockfish detail lives behind this -
  * callers send a FEN and get back an `EngineMove`, nothing else.
  *
- * Deliberately narrow for this phase: no `configure`/`analyse` yet (no
- * difficulty levels or post-game analysis exist yet - see build spec
- * phases 3 and 7). Extend this interface only when those phases start.
+ * Deliberately narrow beyond `start`'s `EngineSessionConfig`: no
+ * `configure`/`analyse` yet (post-game analysis is a later phase - see
+ * build spec phase 7). Extend this interface only when that phase starts.
  */
 export interface ChessEngine {
   /** Current lifecycle state (see `EngineLifecycleState`). */
@@ -19,8 +24,17 @@ export interface ChessEngine {
    * `ready`. Can only be called once, from `uninitialised`. Rejects and
    * moves to `error` if the engine never responds (see
    * `StockfishAdapter`'s handshake timeout) - it never hangs forever.
+   *
+   * `config` is validated and snapshotted once, for this adapter's entire
+   * lifetime (build spec section 14's difficulty system) - a search never
+   * changes strength mid-session. Omitted, it defaults to `'strongest'`,
+   * which is numerically identical to the engine's own out-of-the-box
+   * settings, so callers that never think about difficulty keep today's
+   * behaviour unchanged. Rejects through the same `error`-state path as any
+   * other startup failure if `config.difficulty` is invalid, or if the
+   * engine's advertised UCI capabilities can't support it.
    */
-  start(): Promise<void>;
+  start(config?: EngineSessionConfig): Promise<void>;
 
   /**
    * Sends `isready` and resolves on `readyok`. Safe to call at any point

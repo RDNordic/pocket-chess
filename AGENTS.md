@@ -37,7 +37,7 @@ quick reference:
   etc.) without verifying they're genuinely required against real build
   output/browser behaviour first.
 
-## Current architecture (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + release hygiene + Phase 2A + Phase 2B)
+## Current architecture (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + release hygiene + Phase 2A + Phase 2B + Phase 3A)
 
 ```text
 src/
@@ -46,7 +46,9 @@ src/
   engine/             Stockfish boundary: ChessEngine interface,
                       StockfishAdapter (Worker/UCI lifecycle, timeouts,
                       Worker-generation-safe recovery), UciParser,
-                      engineTypes - see the Phase 2A/2B notes below.
+                      engineTypes, engineDifficulty (the one file mapping
+                      difficulty -> Skill Level) - see the Phase 2A/2B/3A
+                      notes below.
   components/board/  presentation-only board (no rules logic)
   features/home/     home screen
   features/play/     local two-player screen + use-case hook
@@ -144,6 +146,21 @@ A narrowly scoped production bug fix followed Phase 2B: production
 `script-src 'self'`, so `public/_headers`'s CSP now reads `script-src
 'self' 'wasm-unsafe-eval'` - the minimal WebAssembly-compilation
 allowance, not the broader `unsafe-eval`.
+Phase 3A (adjustable bot strength) is done: a **provisional**, scoped-down
+slice of build spec Phase 3 - only Stockfish's `Skill Level` UCI option
+(`UCI_LimitStrength` explicitly `false`), no `UCI_Elo`/rating estimation.
+`ChessEngine.start()` takes an optional `EngineSessionConfig`, validated
+and snapshotted once; `StockfishAdapter` parses the engine's advertised
+`Skill Level`/`UCI_LimitStrength` capabilities out of its `uci` response,
+fails through the existing error-state path if they're missing/
+incompatible, and otherwise sends `setoption` for both after `uciok` and
+before `isready`/`readyok` - on the initial handshake and on every
+Worker-restart recovery path alike, so the selected strength survives
+recovery for free. The difficulty -> Skill Level mapping lives in one file
+(`src/engine/engineDifficulty.ts`); React only ever sees the friendly
+`EngineDifficulty` label. `ColourSelectScreen` now also picks a difficulty
+(default Gentle for new games, fixed for the session), and
+`ComputerGameScreen` shows a compact badge for the active one.
 
 ## Working rules for this repo
 

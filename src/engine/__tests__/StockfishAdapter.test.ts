@@ -54,6 +54,19 @@ async function waitForSent(worker: FakeWorker, command: string): Promise<void> {
   });
 }
 
+/** Emits the two `option` lines a real Stockfish 18 Lite build sends in
+ * response to `uci`, before its own `uciok` - `Skill Level` (spin, 0-20)
+ * and `UCI_LimitStrength` (check). Every test below that drives a full
+ * handshake to a healthy `ready` adapter needs these advertised, or
+ * `validateCapabilities()` (see StockfishAdapter.ts) rejects `start()`
+ * before it ever reaches `isready` - tests that specifically exercise that
+ * rejection (see "StockfishAdapter engine capability validation" below)
+ * omit or alter these lines on purpose instead of calling this helper. */
+function emitCapabilityAdvertisement(worker: FakeWorker): void {
+  worker.emit('option name Skill Level type spin default 20 min 0 max 20');
+  worker.emit('option name UCI_LimitStrength type check default false');
+}
+
 /** Spawns an adapter against a fake worker and drives it through the full
  * uci/isready handshake, as every other test needs a `ready` adapter to
  * start from. Ample timeouts by default so normal-flow tests never race a
@@ -76,6 +89,7 @@ async function startedAdapter(
 
   await waitForSent(worker, 'uci');
   worker.emit('id name Stockfish 18');
+  emitCapabilityAdvertisement(worker);
   worker.emit('uciok');
   await waitForSent(worker, 'isready');
   worker.emit('readyok');
@@ -101,6 +115,7 @@ function trackedWorkerFactory(): { workerFactory: () => FakeWorker; spawned: Fak
 /** Drives one worker through a full, successful uci/isready handshake. */
 async function driveHandshake(worker: FakeWorker): Promise<void> {
   await waitForSent(worker, 'uci');
+  emitCapabilityAdvertisement(worker);
   worker.emit('uciok');
   await waitForSent(worker, 'isready');
   worker.emit('readyok');
@@ -110,7 +125,12 @@ describe('StockfishAdapter lifecycle', () => {
   it('starts up through the full uci/isready handshake', async () => {
     const { adapter, worker } = await startedAdapter();
     expect(adapter.state).toBe('ready');
-    expect(worker.sent).toEqual(['uci', 'isready']);
+    expect(worker.sent).toEqual([
+      'uci',
+      'setoption name UCI_LimitStrength value false',
+      'setoption name Skill Level value 20',
+      'isready',
+    ]);
   });
 
   it('rejects starting an already-started engine', async () => {
@@ -173,6 +193,7 @@ describe('StockfishAdapter lifecycle', () => {
     const startPromise = adapter.start();
     startPromise.catch(() => {});
     await waitForSent(worker, 'uci');
+    emitCapabilityAdvertisement(worker);
     worker.emit('uciok');
     // The isready round trip from start() itself never gets a reply, so all
     // three concurrent calls below coalesce onto it and share its timeout.
@@ -217,6 +238,7 @@ describe('StockfishAdapter bounded waits / timeouts', () => {
     });
     const startPromise = adapter.start();
     await waitForSent(worker, 'uci');
+    emitCapabilityAdvertisement(worker);
     worker.emit('uciok');
     await expect(startPromise).rejects.toThrow(/timed out waiting.*"isready"/);
     expect(adapter.state).toBe('error');
@@ -230,6 +252,7 @@ describe('StockfishAdapter bounded waits / timeouts', () => {
     });
     const startPromise = adapter.start();
     await waitForSent(worker, 'uci');
+    emitCapabilityAdvertisement(worker);
     worker.emit('uciok');
     await waitForSent(worker, 'isready');
     worker.emit('readyok');
@@ -245,6 +268,7 @@ describe('StockfishAdapter bounded waits / timeouts', () => {
     });
     const start2 = adapter2.start();
     await waitForSent(worker2, 'uci');
+    emitCapabilityAdvertisement(worker2);
     worker2.emit('uciok');
     await waitForSent(worker2, 'isready');
     worker2.emit('readyok');
@@ -269,6 +293,7 @@ describe('StockfishAdapter bounded waits / timeouts', () => {
 
     const startPromise = adapter.start();
     await waitForSent(spawned[0], 'uci');
+    emitCapabilityAdvertisement(spawned[0]);
     spawned[0].emit('uciok');
     await waitForSent(spawned[0], 'isready');
     spawned[0].emit('readyok');
@@ -289,6 +314,7 @@ describe('StockfishAdapter bounded waits / timeouts', () => {
 
     const restarted = spawned[1];
     await waitForSent(restarted, 'uci');
+    emitCapabilityAdvertisement(restarted);
     restarted.emit('uciok');
     await waitForSent(restarted, 'isready');
     restarted.emit('readyok');
@@ -319,6 +345,7 @@ describe('StockfishAdapter bounded waits / timeouts', () => {
 
     const startPromise = adapter.start();
     await waitForSent(spawned[0], 'uci');
+    emitCapabilityAdvertisement(spawned[0]);
     spawned[0].emit('uciok');
     await waitForSent(spawned[0], 'isready');
     spawned[0].emit('readyok');
@@ -623,6 +650,290 @@ describe('StockfishAdapter disposal', () => {
   });
 });
 
+describe('StockfishAdapter engine difficulty / capability validation', () => {
+  it.each([
+    ['gentle', 0],
+    ['casual', 5],
+    ['challenging', 10],
+    ['strongest', 20],
+  ] as const)('sends the mapped Skill Level for difficulty "%s"', async (difficulty, skillLevel) => {
+    const worker = new FakeWorker();
+    const adapter = new StockfishAdapter({ workerFactory: () => worker });
+    const startPromise = adapter.start({ difficulty });
+
+    await waitForSent(worker, 'uci');
+    emitCapabilityAdvertisement(worker);
+    worker.emit('uciok');
+    await waitForSent(worker, `setoption name Skill Level value ${skillLevel}`);
+    await waitForSent(worker, 'isready');
+    worker.emit('readyok');
+    await startPromise;
+
+    expect(adapter.state).toBe('ready');
+  });
+
+  it('start() with no config defaults to "strongest" (Skill Level 20) - identical to pre-Phase-3A behaviour', async () => {
+    const worker = new FakeWorker();
+    const adapter = new StockfishAdapter({ workerFactory: () => worker });
+    const startPromise = adapter.start();
+
+    await waitForSent(worker, 'uci');
+    emitCapabilityAdvertisement(worker);
+    worker.emit('uciok');
+    await waitForSent(worker, 'setoption name Skill Level value 20');
+    await waitForSent(worker, 'isready');
+    worker.emit('readyok');
+    await expect(startPromise).resolves.toBeUndefined();
+  });
+
+  it('sends UCI_LimitStrength=false and the selected Skill Level strictly after uciok and strictly before isready', async () => {
+    const worker = new FakeWorker();
+    const adapter = new StockfishAdapter({ workerFactory: () => worker });
+    const startPromise = adapter.start({ difficulty: 'casual' });
+
+    await waitForSent(worker, 'uci');
+    emitCapabilityAdvertisement(worker);
+    worker.emit('uciok');
+    await waitForSent(worker, 'isready');
+    worker.emit('readyok');
+    await startPromise;
+
+    const uciokIndex = worker.sent.indexOf('uci');
+    const limitStrengthIndex = worker.sent.indexOf('setoption name UCI_LimitStrength value false');
+    const skillLevelIndex = worker.sent.indexOf('setoption name Skill Level value 5');
+    const isreadyIndex = worker.sent.indexOf('isready');
+
+    expect(uciokIndex).toBeGreaterThanOrEqual(0);
+    expect(limitStrengthIndex).toBeGreaterThan(uciokIndex);
+    expect(skillLevelIndex).toBeGreaterThan(limitStrengthIndex);
+    expect(isreadyIndex).toBeGreaterThan(skillLevelIndex);
+  });
+
+  it('rejects start() and moves to error when the engine does not advertise "Skill Level" at all', async () => {
+    const worker = new FakeWorker();
+    const adapter = new StockfishAdapter({ workerFactory: () => worker });
+    const startPromise = adapter.start({ difficulty: 'gentle' });
+
+    await waitForSent(worker, 'uci');
+    worker.emit('option name UCI_LimitStrength type check default false');
+    worker.emit('uciok');
+
+    await expect(startPromise).rejects.toThrow(/does not advertise the required "Skill Level"/);
+    expect(adapter.state).toBe('error');
+    expect(worker.sent).not.toContain('isready');
+  });
+
+  it('rejects start() and moves to error when "Skill Level" is advertised with the wrong option type', async () => {
+    const worker = new FakeWorker();
+    const adapter = new StockfishAdapter({ workerFactory: () => worker });
+    const startPromise = adapter.start({ difficulty: 'gentle' });
+
+    await waitForSent(worker, 'uci');
+    worker.emit('option name Skill Level type check default true');
+    worker.emit('option name UCI_LimitStrength type check default false');
+    worker.emit('uciok');
+
+    await expect(startPromise).rejects.toThrow(/does not advertise the required "Skill Level"/);
+    expect(adapter.state).toBe('error');
+  });
+
+  it('rejects start() when the advertised "Skill Level" range does not include the requested value', async () => {
+    const worker = new FakeWorker();
+    const adapter = new StockfishAdapter({ workerFactory: () => worker });
+    // Advertises a narrower range than "strongest" (20) needs.
+    const startPromise = adapter.start({ difficulty: 'strongest' });
+
+    await waitForSent(worker, 'uci');
+    worker.emit('option name Skill Level type spin default 15 min 0 max 15');
+    worker.emit('option name UCI_LimitStrength type check default false');
+    worker.emit('uciok');
+
+    await expect(startPromise).rejects.toThrow(/advertised "Skill Level" range \[0, 15\]/);
+    expect(adapter.state).toBe('error');
+  });
+
+  it('rejects start() and moves to error when the engine does not advertise "UCI_LimitStrength"', async () => {
+    const worker = new FakeWorker();
+    const adapter = new StockfishAdapter({ workerFactory: () => worker });
+    const startPromise = adapter.start({ difficulty: 'gentle' });
+
+    await waitForSent(worker, 'uci');
+    worker.emit('option name Skill Level type spin default 20 min 0 max 20');
+    worker.emit('uciok');
+
+    await expect(startPromise).rejects.toThrow(/does not advertise the required "UCI_LimitStrength"/);
+    expect(adapter.state).toBe('error');
+  });
+
+  it('rejects start() synchronously through the error-state path for an invalid difficulty, without ever touching the worker', async () => {
+    const worker = new FakeWorker();
+    const adapter = new StockfishAdapter({ workerFactory: () => worker });
+
+    await expect(adapter.start({ difficulty: 'bogus' as never })).rejects.toThrow(
+      /invalid engine difficulty/,
+    );
+    expect(adapter.state).toBe('error');
+    expect(worker.sent).toEqual([]);
+  });
+
+  it('capability collection does not leak across Worker generations: generation 2 is validated purely against its own advertisement', async () => {
+    const { workerFactory, spawned } = trackedWorkerFactory();
+    const adapter = new StockfishAdapter({
+      workerFactory,
+      handshakeTimeoutMs: AMPLE_TIMEOUT_MS,
+      stopTimeoutMs: FAST_TIMEOUT_MS,
+    });
+    const startPromise = adapter.start({ difficulty: 'strongest' });
+    await driveHandshake(spawned[0]);
+    await startPromise;
+
+    // Force a restart via the stop-recovery path.
+    const search = adapter.findBestMove(START_FEN, { movetimeMs: 10_000 });
+    await waitForSent(spawned[0], 'go movetime 10000');
+    await adapter.stop();
+    await expect(search).rejects.toThrow(/search stopped/);
+    await vi.waitFor(() => expect(spawned).toHaveLength(2), { timeout: 2_000 });
+
+    // Generation 2 advertises a narrower "Skill Level" range than
+    // generation 1 did - if generation 1's wider range had leaked into
+    // generation 2's validation, this would wrongly succeed.
+    await waitForSent(spawned[1], 'uci');
+    spawned[1].emit('option name Skill Level type spin default 10 min 0 max 10');
+    spawned[1].emit('option name UCI_LimitStrength type check default false');
+    spawned[1].emit('uciok');
+
+    await vi.waitFor(() => expect(adapter.state).toBe('error'), { timeout: 2_000 });
+  });
+
+  it('reapplies the same selected Skill Level after a stop-recovery-timeout restart', async () => {
+    const { workerFactory, spawned } = trackedWorkerFactory();
+    const adapter = new StockfishAdapter({
+      workerFactory,
+      handshakeTimeoutMs: AMPLE_TIMEOUT_MS,
+      stopTimeoutMs: FAST_TIMEOUT_MS,
+    });
+    const startPromise = adapter.start({ difficulty: 'challenging' });
+    await driveHandshake(spawned[0]);
+    await startPromise;
+    expect(spawned[0].sent).toContain('setoption name Skill Level value 10');
+
+    const first = adapter.findBestMove(START_FEN, { movetimeMs: 10_000 });
+    await waitForSent(spawned[0], 'go movetime 10000');
+    const second = adapter.findBestMove(AFTER_E4_FEN, { movetimeMs: 200 });
+    await expect(first).rejects.toThrow(/superseded/);
+    // spawned[0] never replies to `stop` - stop-recovery timeout restarts it.
+    await vi.waitFor(() => expect(spawned).toHaveLength(2), { timeout: 2_000 });
+
+    await driveHandshake(spawned[1]);
+    expect(spawned[1].sent).toContain('setoption name Skill Level value 10');
+    expect(spawned[1].sent).toContain('setoption name UCI_LimitStrength value false');
+
+    await waitForSent(spawned[1], 'go movetime 200');
+    spawned[1].emit('bestmove e7e5');
+    await expect(second).resolves.toEqual({ uci: 'e7e5', ponder: undefined });
+  });
+
+  it('reapplies the same selected Skill Level after a search-watchdog restart', async () => {
+    const { workerFactory, spawned } = trackedWorkerFactory();
+    const adapter = new StockfishAdapter({
+      workerFactory,
+      handshakeTimeoutMs: AMPLE_TIMEOUT_MS,
+      searchWatchdogOverheadMs: FAST_TIMEOUT_MS,
+    });
+    const startPromise = adapter.start({ difficulty: 'casual' });
+    await driveHandshake(spawned[0]);
+    await startPromise;
+
+    const search = adapter.findBestMove(START_FEN, { movetimeMs: 1 });
+    await waitForSent(spawned[0], 'go movetime 1');
+    // spawned[0] never replies at all - the watchdog fires and restarts.
+    await expect(search).rejects.toThrow(/watchdog/);
+    await vi.waitFor(() => expect(spawned).toHaveLength(2), { timeout: 2_000 });
+
+    await driveHandshake(spawned[1]);
+    expect(spawned[1].sent).toContain('setoption name Skill Level value 5');
+    expect(spawned[1].sent).toContain('setoption name UCI_LimitStrength value false');
+  });
+
+  it('does not dispatch a queued search until the restarted generation completes its own setoption/isready sequence', async () => {
+    const { workerFactory, spawned } = trackedWorkerFactory();
+    const adapter = new StockfishAdapter({
+      workerFactory,
+      handshakeTimeoutMs: AMPLE_TIMEOUT_MS,
+      stopTimeoutMs: FAST_TIMEOUT_MS,
+    });
+    const startPromise = adapter.start({ difficulty: 'gentle' });
+    await driveHandshake(spawned[0]);
+    await startPromise;
+
+    const first = adapter.findBestMove(START_FEN, { movetimeMs: 10_000 });
+    await waitForSent(spawned[0], 'go movetime 10000');
+    const second = adapter.findBestMove(AFTER_E4_FEN, { movetimeMs: 200 });
+    await expect(first).rejects.toThrow(/superseded/);
+    await vi.waitFor(() => expect(spawned).toHaveLength(2), { timeout: 2_000 });
+
+    await waitForSent(spawned[1], 'uci');
+    emitCapabilityAdvertisement(spawned[1]);
+    spawned[1].emit('uciok');
+    await waitForSent(spawned[1], 'setoption name Skill Level value 0');
+
+    // The queued search must not have been dispatched yet - isready/readyok
+    // for the new generation has not completed.
+    expect(spawned[1].sent).not.toContain(`position fen ${AFTER_E4_FEN}`);
+    expect(spawned[1].sent.some((c) => c.startsWith('go '))).toBe(false);
+
+    await waitForSent(spawned[1], 'isready');
+    spawned[1].emit('readyok');
+
+    await waitForSent(spawned[1], 'go movetime 200');
+    spawned[1].emit('bestmove e7e5');
+    await expect(second).resolves.toEqual({ uci: 'e7e5', ponder: undefined });
+  });
+
+  it('dispose() during capability validation leaves the adapter disposed, not errored', async () => {
+    const worker = new FakeWorker();
+    const adapter = new StockfishAdapter({ workerFactory: () => worker });
+    const startPromise = adapter.start({ difficulty: 'gentle' });
+
+    await waitForSent(worker, 'uci');
+    // No capabilities advertised at all - validateCapabilities would throw
+    // once 'uciok' arrives, but dispose() races ahead of that.
+    adapter.dispose();
+    worker.emit('uciok');
+
+    await expect(startPromise).rejects.toThrow(/disposed/);
+    expect(adapter.state).toBe('disposed');
+  });
+
+  it("a stale generation's late option/uciok lines cannot affect a current generation's validation or lifecycle", async () => {
+    const { workerFactory, spawned } = trackedWorkerFactory();
+    const adapter = new StockfishAdapter({
+      workerFactory,
+      handshakeTimeoutMs: AMPLE_TIMEOUT_MS,
+      stopTimeoutMs: FAST_TIMEOUT_MS,
+    });
+    const startPromise = adapter.start({ difficulty: 'strongest' });
+    await driveHandshake(spawned[0]);
+    await startPromise;
+
+    const first = adapter.findBestMove(START_FEN, { movetimeMs: 10_000 });
+    await waitForSent(spawned[0], 'go movetime 10000');
+    await adapter.stop();
+    await expect(first).rejects.toThrow(/search stopped/);
+    await vi.waitFor(() => expect(spawned).toHaveLength(2), { timeout: 2_000 });
+    await driveHandshake(spawned[1]);
+    await vi.waitFor(() => expect(adapter.state).toBe('ready'), { timeout: 2_000 });
+
+    // The old (generation 1) worker's callbacks were detached on restart -
+    // a late, incompatible option/uciok pair from it must have no effect.
+    expect(() =>
+      spawned[0].emit('option name Skill Level type spin default 20 min 0 max 0'),
+    ).not.toThrow();
+    expect(() => spawned[0].emit('uciok')).not.toThrow();
+    expect(adapter.state).toBe('ready');
+  });
+});
+
 describe('StockfishAdapter search watchdog', () => {
   it('bounds an ordinary search that gets neither a bestmove nor a worker error', async () => {
     const { workerFactory, spawned } = trackedWorkerFactory();
@@ -765,6 +1076,7 @@ describe('StockfishAdapter Worker generation safety', () => {
     // Worker 2 must perform its own complete, fresh handshake - not reuse
     // (or be blocked by) whatever was pending for Worker 1.
     await waitForSent(spawned[1], 'uci');
+    emitCapabilityAdvertisement(spawned[1]);
     spawned[1].emit('uciok');
     await waitForSent(spawned[1], 'isready');
     spawned[1].emit('readyok');
@@ -796,6 +1108,7 @@ describe('StockfishAdapter Worker generation safety', () => {
 
     await vi.waitFor(() => expect(spawned).toHaveLength(2), { timeout: 2_000 });
     await waitForSent(spawned[1], 'uci');
+    emitCapabilityAdvertisement(spawned[1]);
     spawned[1].emit('uciok');
     await waitForSent(spawned[1], 'isready');
     spawned[1].emit('readyok');

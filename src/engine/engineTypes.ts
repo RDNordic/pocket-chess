@@ -42,6 +42,24 @@ export function assertValidSearchLimits(limits: SearchLimits): void {
 }
 
 /**
+ * Friendly, provisional difficulty labels (build spec section 14). Not
+ * calibrated FIDE ratings - just names for four `Skill Level` settings.
+ * The actual mapping to a `Skill Level` value lives in `engineDifficulty.ts`
+ * (kept in one place, per section 14's "store the mapping in one
+ * configuration file" rule) rather than here alongside the type.
+ */
+export type EngineDifficulty = 'gentle' | 'casual' | 'challenging' | 'strongest';
+
+/**
+ * Per-session engine configuration, snapshotted once by `start()` (see
+ * `ChessEngine.start`). Deliberately just the difficulty label - no raw UCI
+ * option names/values ever cross this boundary.
+ */
+export interface EngineSessionConfig {
+  difficulty: EngineDifficulty;
+}
+
+/**
  * A move proposed by the engine, in raw UCI form. This is not authoritative
  * - callers must validate it through `ChessGame` (chess.js) before it may
  * affect a game, per the project's architectural boundary.

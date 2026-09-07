@@ -1530,6 +1530,18 @@ Acceptance:
 
 The application is pleasant enough for routine casual play.
 
+**Phase 3A (done, provisional): adjustable bot strength only.** A
+scoped-down slice delivering just the "multiple difficulty levels" bullet,
+via Stockfish's `Skill Level` UCI option (`UCI_LimitStrength` explicitly
+`false` - no `UCI_Elo`/rating estimation). Four friendly presets (Gentle/
+Casual/Challenging/Strongest, mapped to Skill Level 0/5/10/20 in
+`src/engine/engineDifficulty.ts`), chosen after verifying which UCI
+options the vendored Stockfish 18 Lite build actually advertises. These
+are provisional levels, not calibrated ratings, and remain subject to
+revision. The rest of this phase - random colour, undo, resign, restart,
+game status polish - is **not** part of Phase 3A and remains open (see
+next-steps.md's Phase 3B entry).
+
 ---
 
 ## Phase 4: local persistence

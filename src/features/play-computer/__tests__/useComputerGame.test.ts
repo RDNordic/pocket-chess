@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChessEngine } from '../../../engine/ChessEngine';
-import type { EngineMove, SearchLimits } from '../../../engine/engineTypes';
+import type { EngineMove, EngineSessionConfig, SearchLimits } from '../../../engine/engineTypes';
 import { useComputerGame } from '../useComputerGame';
 
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -35,12 +35,17 @@ class FakeChessEngine implements ChessEngine {
   startCallCount = 0;
   disposeCallCount = 0;
   findBestMoveCalls: Array<{ fen: string; limits: SearchLimits }> = [];
+  /** Every `EngineSessionConfig` (or `undefined`) this engine's `start()`
+   * was called with, in order - lets tests assert the hook threads its
+   * `sessionConfig` through unchanged, including on retry. */
+  startConfigs: Array<EngineSessionConfig | undefined> = [];
 
   private startDeferred: Deferred<void> | null = null;
   private moveDeferred: Deferred<EngineMove> | null = null;
 
-  start(): Promise<void> {
+  start(config?: EngineSessionConfig): Promise<void> {
     this.startCallCount += 1;
+    this.startConfigs.push(config);
     this.state = 'starting';
     this.startDeferred = createDeferred<void>();
     return this.startDeferred.promise.then(() => {
@@ -468,5 +473,54 @@ describe('useComputerGame', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  describe('sessionConfig (engine difficulty)', () => {
+    it('passes the given sessionConfig through to the engine unchanged', async () => {
+      const { createEngine, engines } = engineFactory();
+      const sessionConfig: EngineSessionConfig = { difficulty: 'challenging' };
+      renderHook(() => useComputerGame('white', { createEngine, sessionConfig }));
+
+      await waitFor(() => expect(engines[0].startConfigs).toHaveLength(1));
+      expect(engines[0].startConfigs[0]).toEqual({ difficulty: 'challenging' });
+    });
+
+    it('defaults to "strongest" when no sessionConfig is supplied - unchanged pre-Phase-3A behaviour', async () => {
+      const { createEngine, engines } = engineFactory();
+      renderHook(() => useComputerGame('white', { createEngine }));
+
+      await waitFor(() => expect(engines[0].startConfigs).toHaveLength(1));
+      expect(engines[0].startConfigs[0]).toEqual({ difficulty: 'strongest' });
+    });
+
+    it('retry() starts the replacement engine with the identical sessionConfig', async () => {
+      const { createEngine, engines } = engineFactory();
+      const sessionConfig: EngineSessionConfig = { difficulty: 'casual' };
+      const { result } = renderHook(() => useComputerGame('black', { createEngine, sessionConfig }));
+
+      act(() => engines[0].rejectStart(new Error('boom')));
+      await waitFor(() => expect(result.current.phase).toBe('engine-error'));
+      expect(engines[0].startConfigs[0]).toEqual({ difficulty: 'casual' });
+
+      act(() => result.current.retry());
+      await waitFor(() => expect(engines[1].startConfigs).toHaveLength(1));
+      expect(engines[1].startConfigs[0]).toEqual({ difficulty: 'casual' });
+    });
+
+    it("player Black's opening computer move waits for the configured start() to resolve, not just any start()", async () => {
+      const { createEngine, engines } = engineFactory();
+      const sessionConfig: EngineSessionConfig = { difficulty: 'gentle' };
+      const { result } = renderHook(() => useComputerGame('black', { createEngine, sessionConfig }));
+
+      // start() has been called (with the session config) but not yet
+      // resolved - no move must be requested until it settles.
+      expect(engines[0].startConfigs).toEqual([{ difficulty: 'gentle' }]);
+      expect(engines[0].findBestMoveCalls).toHaveLength(0);
+      expect(result.current.phase).toBe('computer-thinking');
+
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
+      expect(engines[0].findBestMoveCalls[0].fen).toBe(START_FEN);
+    });
   });
 });
