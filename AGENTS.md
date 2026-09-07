@@ -148,9 +148,11 @@ A narrowly scoped production bug fix followed Phase 2B: production
 allowance, not the broader `unsafe-eval`.
 Phase 3A (adjustable bot strength) is implemented and passes all automated
 checks (`npm test`/`npm run lint`/`npm run build`/`npm run test:engine`/
-`npm run test:e2e`) on branch `feature/phase-3a-bot-strength`, **pending
-independent review and a real-iPhone/offline acceptance check before it
-merges to `main`** - do not treat it as accepted or read this as covering
+`npm run test:e2e`) on branch `feature/phase-3a-bot-strength`, with
+independent review GO obtained - ready to merge to `main`. **A real-iPhone
++ offline acceptance check against the deployed production PWA is still
+required after that merge/deploy, before this phase may be called
+complete** (not a precondition of merging) - do not read this as covering
 the rest of build spec Phase 3 (see the Phase 3B entry in next-steps.md).
 A **provisional**, scoped-down slice of build spec Phase 3 - only
 Stockfish's `Skill Level` UCI option (`UCI_LimitStrength` explicitly
