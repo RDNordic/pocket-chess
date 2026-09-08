@@ -69,30 +69,35 @@ selection, undo/resign/restart, and any player-facing rating estimate.
 Reference: branch `hotfix/play-computer-offline-regression`, off `main`
 (includes the merged Phase 3A). Physical iPhone testing in Airplane Mode
 found Play Computer failing offline in production ("The computer opponent
-ran into a problem.") despite working online and despite the vendored
-engine's `.js`/`.wasm` both being correctly precached (verified - see the
-hotfix's own commit message/root-cause note). Root cause: not reproducible
-against a real Worker/WASM/service-worker/Cache-Storage stack on desktop
-Chromium, which narrows it to a WebKit/iOS-Safari-specific gap in how a
-service worker interacts with resources a *nested* dedicated Worker
-fetches for itself (a documented category of past WebKit bugs - some
-fixed as recently as Safari 17.2 - either around Cache Storage read
-performance/correctness or a newly-installed service worker's control of
-a page's own Workers) - not something this project's own automated tests
-can exercise, since none of them run against real iOS WebKit. Fix (both
-in the engine/application layers, no vendored-file or CSP changes):
-`StockfishAdapter`'s handshake timeout raised from 10s to 15s (real-device
-WASM compile from Cache Storage is measurably slower than a fast network
-stream in CI/desktop testing); `useComputerGame`'s engine start-up now
-gets one automatic, transparent retry (a fresh Worker, same
+ran into a problem.") - a real, confirmed failure on real hardware. This
+happened despite working online and despite the vendored engine's
+`.js`/`.wasm` both being correctly precached (verified directly against
+the generated service worker's precache manifest - see the hotfix's own
+commit message). Also confirmed: a real, fully-offline reproduction
+(actual Worker, actual vendored WASM, actual service worker and Cache
+Storage, network hard-disabled) passes cleanly on desktop Chromium - the
+failure was not reproduced in this environment. Working hypothesis, not a
+confirmed root cause (no physical iPhone or real WebKit browser was
+available to test against in this environment): a platform-specific
+(WebKit/iOS Safari) startup or cache-timing issue in how a service worker
+interacts with resources a *nested* dedicated Worker fetches for itself -
+a plausible category given documented past WebKit bugs in this area, but
+not verified against the actual device. Fix (both in the engine/
+application layers, no vendored-file or CSP changes) targets this
+hypothesis without depending on it being exactly right:
+`StockfishAdapter`'s handshake timeout raised from 10s to 15s, on the
+reasoning that WASM read-from-cache-and-compile on real mobile hardware
+could plausibly take longer than in CI/desktop testing (no on-device
+timing measurement was taken to confirm this); `useComputerGame`'s engine
+start-up now gets one automatic, transparent retry (a fresh Worker, same
 `sessionConfig`) before ever surfacing `engine-error` to the player - the
 existing manual Retry button is unchanged and remains the fallback if
 both attempts fail. A real, fully-offline Playwright e2e test
 (`tests/e2e/play-computer.spec.ts`) now exercises the actual service
 worker + Cache Storage + real Worker/WASM with the network hard-disabled.
-Outstanding: this branch has not had independent review, and - like Phase
-3A itself - the ultimate proof is a physical iPhone/Airplane-Mode retest
-against a fresh deploy, which cannot be performed from this environment.
+Outstanding: physical iPhone Airplane Mode validation of this fix against
+a fresh deploy is still required and has not yet been performed - the
+underlying platform-specific cause remains unconfirmed until then.
 
 ## Production bug fix: WASM blocked by CSP - done
 
