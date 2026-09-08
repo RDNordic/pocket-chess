@@ -679,8 +679,17 @@ describe('useComputerGame', () => {
 
       // The abandoned engine's search finally "resolves" after the
       // takeback already restored the position - this stale reply must
-      // never reach the restored state.
-      expect(() => engines[0].resolveMove('e7e5')).not.toThrow();
+      // never reach the restored state. `resolveMove` only settles the
+      // deferred promise; `requestComputerMove`'s own continuation (the
+      // `session !== sessionRef.current` guard that must discard it) runs
+      // as a *later* microtask, so this has to be awaited inside `act`
+      // before asserting anything - otherwise the assertions below would
+      // pass trivially regardless of whether that guard ever ran.
+      await act(async () => {
+        engines[0].resolveMove('e7e5');
+        await Promise.resolve();
+        await Promise.resolve();
+      });
       expect(result.current.phase).toBe('player-turn');
       expect(result.current.snapshot.history).toHaveLength(0);
     });
@@ -845,10 +854,19 @@ describe('useComputerGame', () => {
 
       act(() => result.current.resign());
       expect(result.current.snapshot.outcome).toEqual({ status: 'resigned', winner: 'black' });
+      const historyAtResignation = result.current.snapshot.history;
 
-      expect(() => engines[0].resolveMove('e7e5')).not.toThrow();
+      // As above: the stale reply's settlement must be awaited inside
+      // `act` before asserting anything, or the assertions below would
+      // pass trivially without ever exercising the session-token guard.
+      await act(async () => {
+        engines[0].resolveMove('e7e5');
+        await Promise.resolve();
+        await Promise.resolve();
+      });
       expect(result.current.phase).toBe('game-over');
       expect(result.current.snapshot.outcome).toEqual({ status: 'resigned', winner: 'black' });
+      expect(result.current.snapshot.history).toEqual(historyAtResignation);
     });
   });
 });

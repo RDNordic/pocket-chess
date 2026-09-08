@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Board } from '../../components/board/Board';
 import type { BoardOrientation } from '../../components/board/boardGeometry';
 import type { PlayerColour } from '../../chess/chessTypes';
@@ -82,15 +82,25 @@ export function ComputerGameScreen({
   // domain state, so it lives here rather than in the hook. null means no
   // dialog is open.
   const [activeConfirm, setActiveConfirm] = useState<'resign' | 'new-game' | null>(null);
+  // The Resign/New game button that opened the currently-open (or most
+  // recently closed) confirmation - only this screen knows which one that
+  // was, so (mirroring Board.tsx's own `promotionOriginRef` pattern for
+  // PromotionDialog) it captures it at open time and restores focus there
+  // once the dialog closes, however it closes (cancel, Escape, or
+  // confirm) - otherwise focus is left on `document.body` once the
+  // triggering button's own click handler finishes and the dialog
+  // unmounts, a real keyboard-accessibility regression.
+  const confirmOriginRef = useRef<HTMLButtonElement | null>(null);
 
   const isGameOver = phase === 'game-over';
   const boardInteractionDisabled = phase !== 'player-turn';
 
-  function handleResignClick() {
+  function handleResignClick(event: React.MouseEvent<HTMLButtonElement>) {
+    confirmOriginRef.current = event.currentTarget;
     setActiveConfirm('resign');
   }
 
-  function handleNewGameClick() {
+  function handleNewGameClick(event: React.MouseEvent<HTMLButtonElement>) {
     // Nothing to abandon once the game has already ended - confirming
     // would only ask the player to approve something with no real
     // consequence.
@@ -98,6 +108,7 @@ export function ComputerGameScreen({
       onNewGame();
       return;
     }
+    confirmOriginRef.current = event.currentTarget;
     setActiveConfirm('new-game');
   }
 
@@ -114,6 +125,18 @@ export function ComputerGameScreen({
   function handleConfirmCancel() {
     setActiveConfirm(null);
   }
+
+  // Restores focus to whichever button opened the confirmation, once it
+  // closes (see `confirmOriginRef`'s own doc comment). Runs after the
+  // triggering button is guaranteed to be re-enabled/back in the DOM
+  // (this state change commits before the effect fires), matching
+  // Board.tsx's equivalent effect for PromotionDialog exactly.
+  useEffect(() => {
+    if (activeConfirm === null && confirmOriginRef.current) {
+      confirmOriginRef.current.focus();
+      confirmOriginRef.current = null;
+    }
+  }, [activeConfirm]);
 
   return (
     <div className={styles.screen}>

@@ -211,12 +211,40 @@ describe('ComputerGameScreen', () => {
       );
       await screen.findByText(/white to move/i);
 
-      await user.click(screen.getByRole('button', { name: /^resign$/i }));
+      const resignButton = screen.getByRole('button', { name: /^resign$/i });
+      await user.click(resignButton);
       const dialog = await screen.findByRole('alertdialog', { name: /resign this game/i });
       await user.click(within(dialog).getByRole('button', { name: /cancel/i }));
 
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
       expect(screen.getByText(/white to move/i)).toBeInTheDocument();
+      // Focus must return to the button that opened the dialog, not fall
+      // through to document.body.
+      expect(resignButton).toHaveFocus();
+    });
+
+    it('closing the confirmation with Escape also returns focus to the Resign button', async () => {
+      const user = userEvent.setup();
+      render(
+        <ComputerGameScreen
+          playerColour="white"
+          difficulty="gentle"
+          onExit={() => {}}
+          onNewGame={() => {}}
+          onRematch={() => {}}
+          engineOptions={{ createEngine: () => new ImmediateFakeEngine('e7e5') }}
+        />,
+      );
+      await screen.findByText(/white to move/i);
+
+      const resignButton = screen.getByRole('button', { name: /^resign$/i });
+      await user.click(resignButton);
+      await screen.findByRole('alertdialog', { name: /resign this game/i });
+
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(resignButton).toHaveFocus();
     });
 
     it('confirming ends the game with an explicit resignation result', async () => {
@@ -263,10 +291,12 @@ describe('ComputerGameScreen', () => {
       );
       await screen.findByText(/white to move/i);
 
-      await user.click(screen.getByRole('button', { name: /new game/i }));
+      const newGameButton = screen.getByRole('button', { name: /new game/i });
+      await user.click(newGameButton);
       const dialog = await screen.findByRole('alertdialog', { name: /start a new game/i });
       await user.click(within(dialog).getByRole('button', { name: /cancel/i }));
       expect(newGameCalls).toBe(0);
+      expect(newGameButton).toHaveFocus();
 
       await user.click(screen.getByRole('button', { name: /new game/i }));
       const secondDialog = await screen.findByRole('alertdialog', { name: /start a new game/i });
