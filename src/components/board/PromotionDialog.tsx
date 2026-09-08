@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { PlayerColour, PromotionPiece } from '../../chess/chessTypes';
-import { pieceGlyph } from './pieceGlyphs';
+import { pieceAssetUrl } from './pieceAssets';
 import styles from './Board.module.css';
 
 const PROMOTION_OPTIONS: Array<{ piece: PromotionPiece; label: string }> = [
@@ -79,7 +79,13 @@ export function PromotionDialog({ colour, onSelect, onCancel }: PromotionDialogP
             aria-label={label}
             onClick={() => onSelect(piece)}
           >
-            {pieceGlyph(piece, colour)}
+            <img
+              className={styles.promotionPieceImage}
+              src={pieceAssetUrl(piece, colour)}
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+            />
           </button>
         ))}
       </div>

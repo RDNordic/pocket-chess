@@ -37,7 +37,7 @@ quick reference:
   etc.) without verifying they're genuinely required against real build
   output/browser behaviour first.
 
-## Current architecture (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + release hygiene + Phase 2A + Phase 2B + Phase 3A; offline regression hotfix on a branch, pending review - see below)
+## Current architecture (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + release hygiene + Phase 2A + Phase 2B + Phase 3A + offline regression hotfix, merged; Board Piece Theme v1 on a branch, pending review - see below)
 
 ```text
 src/
@@ -49,7 +49,10 @@ src/
                       engineTypes, engineDifficulty (the one file mapping
                       difficulty -> Skill Level) - see the Phase 2A/2B/3A
                       notes below.
-  components/board/  presentation-only board (no rules logic)
+  components/board/  presentation-only board (no rules logic); pieces/
+                      holds the local "cburnett" SVG artwork, rendered via
+                      pieceAssets.ts's one colour+type -> asset mapping -
+                      see the Board Piece Theme v1 note below.
   features/home/     home screen
   features/play/     local two-player screen + use-case hook
   features/play-computer/  human-vs-Stockfish screens + useComputerGame
@@ -148,13 +151,13 @@ A narrowly scoped production bug fix followed Phase 2B: production
 allowance, not the broader `unsafe-eval`.
 Phase 3A (adjustable bot strength) is reviewed and merged to `main`.
 Physical-iPhone Airplane Mode testing against the deployed production PWA
-then found Play Computer failing offline - fixed on branch
+then found Play Computer failing offline - fixed and merged via
 `hotfix/play-computer-offline-regression` (see next-steps.md's "Offline
 Play Computer regression hotfix" entry for the fix and root-cause note);
-that hotfix branch has automated checks passing but has **not** itself had
-independent review or a physical-device retest yet. Do not read Phase 3A
-as covering the rest of build spec Phase 3 (see the Phase 3B entry in
-next-steps.md).
+physical iPhone Airplane Mode validation of that fix has since passed -
+Play Computer works both online and offline in production. Do not read
+Phase 3A as covering the rest of build spec Phase 3 (see the Phase 3B
+entry in next-steps.md).
 A **provisional**, scoped-down slice of build spec Phase 3 - only
 Stockfish's `Skill Level` UCI option (`UCI_LimitStrength` explicitly
 `false`), no `UCI_Elo`/rating estimation.
@@ -170,6 +173,15 @@ recovery for free. The difficulty -> Skill Level mapping lives in one file
 `EngineDifficulty` label. `ColourSelectScreen` now also picks a difficulty
 (default Gentle for new games, fixed for the session), and
 `ComputerGameScreen` shows a compact badge for the active one.
+Board Piece Theme v1 (implemented, pending review, branch
+`feature/board-piece-theme-v1`) is a UX/presentation-only slice - no
+engine/chess-rule/offline/privacy changes. See next-steps.md's own entry
+for full detail; in short: local "cburnett" SVG piece artwork
+(`src/components/board/pieces/`, GPLv2+, recoloured only) replaces the
+previous Unicode glyphs, rendered through one centralised mapping
+(`pieceAssets.ts`), and `vite.config.ts` now disables asset inlining
+(`assetsInlineLimit: 0`) so small local assets are never turned into
+CSP-incompatible `data:` URIs.
 
 ## Working rules for this repo
 

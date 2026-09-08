@@ -95,9 +95,36 @@ existing manual Retry button is unchanged and remains the fallback if
 both attempts fail. A real, fully-offline Playwright e2e test
 (`tests/e2e/play-computer.spec.ts`) now exercises the actual service
 worker + Cache Storage + real Worker/WASM with the network hard-disabled.
-Outstanding: physical iPhone Airplane Mode validation of this fix against
-a fresh deploy is still required and has not yet been performed - the
-underlying platform-specific cause remains unconfirmed until then.
+Physical iPhone Airplane Mode validation against a deployed build has
+since passed - Play Computer works both online and offline in production.
+
+## Board Piece Theme v1 - implemented, pending review
+
+Reference: branch `feature/board-piece-theme-v1`, off `main`. UX/
+presentation-only slice - no chess-rule, engine, offline, or privacy
+changes. Replaces the previous Unicode/system-font piece glyphs
+(`src/components/board/pieceGlyphs.ts`, removed) with the "cburnett"
+vector piece set (Colin M.L. Burnett; GPLv2+, selected from the
+multi-license the original author offers - see
+`LICENSES/THIRD-PARTY-NOTICES.md` for the full provenance/licence note),
+vendored locally as 12 SVG files under
+`src/components/board/pieces/` and rendered via one centralised
+colour+type -> asset mapping (`src/components/board/pieceAssets.ts`).
+Recoloured only (ivory `#f5f1e6` white fill; explicit black `fill="#000"`
+occurrences changed to charcoal `#1b1b1b` - three black pieces, `bP`/
+`bQ`/`bR`, never carried an explicit fill upstream and so still render at
+SVG's implicit default black rather than that charcoal, visually
+indistinguishable on the board and not a defect, see
+`LICENSES/THIRD-PARTY-NOTICES.md`; outline `stroke-width` raised
+`1.5`->`2.2` for a thicker, clearer silhouette) - piece geometry/
+proportions are unmodified upstream artwork,
+so pawn/bishop/knight/etc. proportions are already normalised as one
+family with no per-piece CSS hacks needed. `vite.config.ts` now sets
+`build.assetsInlineLimit: 0` so these (and any future small local assets)
+are always emitted as real same-origin files rather than inlined as
+`data:` URIs, which the production CSP's `img-src 'self'` would otherwise
+block - this was caught and fixed during this slice, not a pre-existing
+issue. No CSP directive itself was changed/weakened.
 
 ## Production bug fix: WASM blocked by CSP - done
 

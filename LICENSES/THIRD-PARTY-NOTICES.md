@@ -194,12 +194,56 @@ SOFTWARE.
 
 ---
 
-## Piece artwork
+## Piece artwork ("cburnett" chess piece set)
 
-Standard Unicode chess symbols (U+2654-U+265F), rendered as text glyphs in
-`src/components/board/pieceGlyphs.ts`. These are characters of the Unicode
-standard, not a licensed third-party asset; no separate licence notice
-applies. No third-party image or font assets are bundled for pieces.
+- Original author: Colin M.L. Burnett
+  (https://en.wikipedia.org/wiki/User:Cburnett).
+- Upstream source used: the per-piece SVG files as vendored by the Lichess
+  project (`public/piece/cburnett/*.svg` in
+  https://github.com/lichess-org/lila), which Lichess's own
+  `COPYING.md` documents as "Colin M.L. Burnett | GPLv2+". The original
+  author independently multi-licenses these files on Wikimedia Commons
+  (e.g. https://commons.wikimedia.org/wiki/File:Chess_klt45.svg) under a
+  choice of the GNU Free Documentation License v1.2+, Creative Commons
+  Attribution-Share Alike 3.0 Unported, a BSD licence, or the GNU General
+  Public License v2 or later ("You may select the license of your
+  choice.").
+- Licence selected for this project: **GNU General Public License v2 or
+  later (GPLv2+)** - the option consistent with, and compatible with
+  combining into, this repository's own GPL-3.0-or-later licensing (a
+  GPLv2-or-later work may be used under GPLv3 terms).
+- Files as vendored, at `src/components/board/pieces/*.svg` (12 files:
+  one per colour x piece type - `wK`, `wQ`, `wR`, `wB`, `wN`, `wP`, `bK`,
+  `bQ`, `bR`, `bB`, `bN`, `bP`):
+  - Modifications from the upstream files: recoloured only - every
+    explicit white-piece `fill="#fff"` changed to an ivory `#f5f1e6`,
+    every explicit black-piece `fill="#000"` changed to a charcoal
+    `#1b1b1b`, and every piece's outline `stroke-width` increased from
+    `1.5` to `2.2` (thicker silhouette/stronger outline, per this slice's
+    readability goals - build spec Phase "Board Piece Theme v1"). Three of
+    the six black pieces (`bP`, `bQ`, `bR`) never carried an explicit
+    top-level `fill="#000"` upstream - their body relies on SVG's implicit
+    default black fill rather than a literal fill colour - so those three
+    still render at plain black rather than the `#1b1b1b` charcoal applied
+    to `bK`, `bB`, and `bN`; the two tones are visually indistinguishable
+    on the board and this is not a defect, only an inconsistency in the
+    literal fill value across files (noted during independent review).
+    Geometry (paths, `viewBox="0 0 45 45"`, proportions between piece
+    types) is unmodified from upstream. This is permitted modification
+    under GPLv2+ (and under every other license option the original
+    author offers).
+  - Redistribution: permitted under GPLv2+, which this project satisfies
+    the same way it already does for its own source (this repository is
+    itself GPL-3.0-or-later, with the full GPLv3 text - which itself
+    includes compatible terms - in the top-level `LICENSE` file).
+  - Attribution: preserved above (original author, upstream source,
+    licence choice) per this notices file's existing convention for every
+    other bundled dependency.
+- Role: presentation-only piece artwork rendered via
+  `src/components/board/pieceAssets.ts`'s single colour+type -> asset
+  mapping (`<img>` elements in `Board.tsx`/`PromotionDialog.tsx`) - purely
+  visual; carries no chess-rule logic and is `aria-hidden` (the board
+  square's own accessible label already announces the piece).
 
 ---
 

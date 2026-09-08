@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameStateSnapshot, PromotionPiece, SquareId } from '../../chess/chessTypes';
 import { isLightSquare, orderedSquares, type BoardOrientation } from './boardGeometry';
-import { pieceAccessibleName, pieceGlyph } from './pieceGlyphs';
+import { pieceAccessibleName, pieceAssetUrl } from './pieceAssets';
 import { PromotionDialog } from './PromotionDialog';
 import styles from './Board.module.css';
 
@@ -166,9 +166,13 @@ export function Board({
                 onClick={(event) => handleSquareClick(square, event.currentTarget)}
               >
                 {piece && (
-                  <span className={styles.piece} data-colour={piece.colour} aria-hidden="true">
-                    {pieceGlyph(piece.type, piece.colour)}
-                  </span>
+                  <img
+                    className={styles.piece}
+                    src={pieceAssetUrl(piece.type, piece.colour)}
+                    alt=""
+                    aria-hidden="true"
+                    draggable={false}
+                  />
                 )}
               </button>
             );
