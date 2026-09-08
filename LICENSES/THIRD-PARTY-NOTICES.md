@@ -215,15 +215,23 @@ SOFTWARE.
 - Files as vendored, at `src/components/board/pieces/*.svg` (12 files:
   one per colour x piece type - `wK`, `wQ`, `wR`, `wB`, `wN`, `wP`, `bK`,
   `bQ`, `bR`, `bB`, `bN`, `bP`):
-  - Modifications from the upstream files: recoloured only - white-piece
-    fill changed from `#fff` to an ivory `#f5f1e6`, black-piece fill
-    changed from `#000` to a charcoal `#1b1b1b`, and every piece's outline
-    `stroke-width` increased from `1.5` to `2.2` (thicker silhouette/
-    stronger outline, per this slice's readability goals - build spec
-    Phase "Board Piece Theme v1"). Geometry (paths, `viewBox="0 0 45 45"`,
-    proportions between piece types) is unmodified from upstream. This is
-    permitted modification under GPLv2+ (and under every other license
-    option the original author offers).
+  - Modifications from the upstream files: recoloured only - every
+    explicit white-piece `fill="#fff"` changed to an ivory `#f5f1e6`,
+    every explicit black-piece `fill="#000"` changed to a charcoal
+    `#1b1b1b`, and every piece's outline `stroke-width` increased from
+    `1.5` to `2.2` (thicker silhouette/stronger outline, per this slice's
+    readability goals - build spec Phase "Board Piece Theme v1"). Three of
+    the six black pieces (`bP`, `bQ`, `bR`) never carried an explicit
+    top-level `fill="#000"` upstream - their body relies on SVG's implicit
+    default black fill rather than a literal fill colour - so those three
+    still render at plain black rather than the `#1b1b1b` charcoal applied
+    to `bK`, `bB`, and `bN`; the two tones are visually indistinguishable
+    on the board and this is not a defect, only an inconsistency in the
+    literal fill value across files (noted during independent review).
+    Geometry (paths, `viewBox="0 0 45 45"`, proportions between piece
+    types) is unmodified from upstream. This is permitted modification
+    under GPLv2+ (and under every other license option the original
+    author offers).
   - Redistribution: permitted under GPLv2+, which this project satisfies
     the same way it already does for its own source (this repository is
     itself GPL-3.0-or-later, with the full GPLv3 text - which itself

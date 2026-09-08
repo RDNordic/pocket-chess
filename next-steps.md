@@ -110,9 +110,14 @@ multi-license the original author offers - see
 vendored locally as 12 SVG files under
 `src/components/board/pieces/` and rendered via one centralised
 colour+type -> asset mapping (`src/components/board/pieceAssets.ts`).
-Recoloured only (ivory `#f5f1e6` white fill, charcoal `#1b1b1b` black
-fill, outline `stroke-width` raised `1.5`->`2.2` for a thicker, clearer
-silhouette) - piece geometry/proportions are unmodified upstream artwork,
+Recoloured only (ivory `#f5f1e6` white fill; explicit black `fill="#000"`
+occurrences changed to charcoal `#1b1b1b` - three black pieces, `bP`/
+`bQ`/`bR`, never carried an explicit fill upstream and so still render at
+SVG's implicit default black rather than that charcoal, visually
+indistinguishable on the board and not a defect, see
+`LICENSES/THIRD-PARTY-NOTICES.md`; outline `stroke-width` raised
+`1.5`->`2.2` for a thicker, clearer silhouette) - piece geometry/
+proportions are unmodified upstream artwork,
 so pawn/bishop/knight/etc. proportions are already normalised as one
 family with no per-piece CSS hacks needed. `vite.config.ts` now sets
 `build.assetsInlineLimit: 0` so these (and any future small local assets)
