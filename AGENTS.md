@@ -37,7 +37,7 @@ quick reference:
   etc.) without verifying they're genuinely required against real build
   output/browser behaviour first.
 
-## Current architecture (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + release hygiene + Phase 2A + Phase 2B; Phase 3A implemented on a branch, pending review - see below)
+## Current architecture (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + release hygiene + Phase 2A + Phase 2B + Phase 3A; offline regression hotfix on a branch, pending review - see below)
 
 ```text
 src/
@@ -146,14 +146,15 @@ A narrowly scoped production bug fix followed Phase 2B: production
 `script-src 'self'`, so `public/_headers`'s CSP now reads `script-src
 'self' 'wasm-unsafe-eval'` - the minimal WebAssembly-compilation
 allowance, not the broader `unsafe-eval`.
-Phase 3A (adjustable bot strength) is implemented and passes all automated
-checks (`npm test`/`npm run lint`/`npm run build`/`npm run test:engine`/
-`npm run test:e2e`) on branch `feature/phase-3a-bot-strength`, with
-independent review GO obtained - ready to merge to `main`. **A real-iPhone
-+ offline acceptance check against the deployed production PWA is still
-required after that merge/deploy, before this phase may be called
-complete** (not a precondition of merging) - do not read this as covering
-the rest of build spec Phase 3 (see the Phase 3B entry in next-steps.md).
+Phase 3A (adjustable bot strength) is reviewed and merged to `main`.
+Physical-iPhone Airplane Mode testing against the deployed production PWA
+then found Play Computer failing offline - fixed on branch
+`hotfix/play-computer-offline-regression` (see next-steps.md's "Offline
+Play Computer regression hotfix" entry for the fix and root-cause note);
+that hotfix branch has automated checks passing but has **not** itself had
+independent review or a physical-device retest yet. Do not read Phase 3A
+as covering the rest of build spec Phase 3 (see the Phase 3B entry in
+next-steps.md).
 A **provisional**, scoped-down slice of build spec Phase 3 - only
 Stockfish's `Skill Level` UCI option (`UCI_LimitStrength` explicitly
 `false`), no `UCI_Elo`/rating estimation.

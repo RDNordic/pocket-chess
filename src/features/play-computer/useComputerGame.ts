@@ -20,6 +20,13 @@ const DEFAULT_MOVETIME_MS = 1000;
  * games to `'gentle'` - this hook has no opinion on that. */
 const DEFAULT_SESSION_CONFIG: EngineSessionConfig = { difficulty: 'strongest' };
 
+/** Total engine start-up attempts per session before surfacing
+ * `engine-error` to the player - the original attempt plus one automatic,
+ * transparent retry. See `initialiseEngine`'s doc comment
+ * (`hotfix/play-computer-offline-regression`) for why a cold start-up can
+ * fail transiently on a real device with no network available. */
+const STARTUP_ATTEMPT_LIMIT = 2;
+
 /**
  * Explicit computer-game phase - the player's turn, the engine searching,
  * the game having ended, or the engine having failed. Deliberately a real
@@ -200,40 +207,63 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
 
   /** Starts a fresh engine for a new session (initial mount, or a retry
    * after failure), then requests the opening computer move if it's
-   * already the computer's turn (the player chose Black). */
+   * already the computer's turn (the player chose Black).
+   *
+   * A cold engine start-up - spawning the Worker and completing the full
+   * `uci`/`isready` handshake for the first time - can fail transiently on
+   * a real device the first time it's attempted with no network available
+   * (see `hotfix/play-computer-offline-regression`'s root-cause note): the
+   * WASM has to be read from the service worker's cache rather than
+   * streamed from a fast connection, and some browsers have had timing
+   * quirks around a freshly-installed service worker's control of a page's
+   * Workers. `STARTUP_ATTEMPT_LIMIT` gives one transparent, automatic
+   * retry - a fresh Worker, same `sessionConfig` - before ever surfacing
+   * `engine-error` to the player; the existing manual "Retry" button
+   * (`retry()`, unchanged) remains the fallback if both attempts fail. */
   const initialiseEngine = useCallback(async () => {
-    sessionRef.current += 1;
-    const session = sessionRef.current;
+    for (let attempt = 1; attempt <= STARTUP_ATTEMPT_LIMIT; attempt += 1) {
+      sessionRef.current += 1;
+      const session = sessionRef.current;
 
-    const engine = createEngine();
-    engineRef.current = engine;
-    const startPromise = engine.start(sessionConfig);
-    startPromiseRef.current = startPromise;
+      const engine = createEngine();
+      engineRef.current = engine;
+      const startPromise = engine.start(sessionConfig);
+      startPromiseRef.current = startPromise;
 
-    try {
-      await startPromise;
-      if (session !== sessionRef.current) return;
+      try {
+        await startPromise;
+        if (session !== sessionRef.current) return;
 
-      const currentSnapshot = game.getSnapshot();
-      if (currentSnapshot.outcome.status !== 'in-progress') {
-        // Defensive: not reachable in the current UI (a fresh session
-        // always starts from the initial position), but kept consistent
-        // with the "no live engine past a terminal game" rule in case a
-        // future caller ever starts this hook from an already-terminal
-        // position.
-        setPhase('game-over');
-        disposeCurrentEngine();
+        const currentSnapshot = game.getSnapshot();
+        if (currentSnapshot.outcome.status !== 'in-progress') {
+          // Defensive: not reachable in the current UI (a fresh session
+          // always starts from the initial position), but kept consistent
+          // with the "no live engine past a terminal game" rule in case a
+          // future caller ever starts this hook from an already-terminal
+          // position.
+          setPhase('game-over');
+          disposeCurrentEngine();
+        } else if (currentSnapshot.turn !== playerColour) {
+          await requestComputerMove(currentSnapshot.fen);
+        } else {
+          setPhase('player-turn');
+        }
+        return;
+      } catch {
+        if (session !== sessionRef.current) return;
+        if (attempt < STARTUP_ATTEMPT_LIMIT) {
+          // Dispose this attempt's failed engine (bumps the session too,
+          // via the same helper every other cleanup path uses) before
+          // trying again - a late response from the failed attempt can
+          // never affect the retry, exactly as for any other session
+          // transition in this hook.
+          disposeCurrentEngine();
+          continue;
+        }
+        setPhase('engine-error');
+        setEngineError(ENGINE_UNAVAILABLE_MESSAGE);
         return;
       }
-      if (currentSnapshot.turn !== playerColour) {
-        await requestComputerMove(currentSnapshot.fen);
-      } else {
-        setPhase('player-turn');
-      }
-    } catch {
-      if (session !== sessionRef.current) return;
-      setPhase('engine-error');
-      setEngineError(ENGINE_UNAVAILABLE_MESSAGE);
     }
   }, [createEngine, game, playerColour, requestComputerMove, disposeCurrentEngine, sessionConfig]);
 

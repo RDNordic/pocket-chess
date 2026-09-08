@@ -61,6 +61,55 @@ test('difficulty selector: arrow-key selection reaches the game session', async 
   await expect(page.getByText('Challenging')).toBeVisible();
 });
 
+test('offline regression (hotfix/play-computer-offline-regression): Play Computer works with the service worker fully offline', async ({
+  page,
+  context,
+}) => {
+  // Reproduces the physical-iPhone Airplane Mode scenario end to end: load
+  // the app once online so the service worker installs and precaches the
+  // engine's .js/.wasm (and every other precached asset), reload so the
+  // page is actually controlled by it, then go fully offline and reload
+  // again before ever touching Play Computer - nothing below this point
+  // may depend on the network in any way.
+  await page.goto('/');
+  // The very first load is never itself controlled by the service worker
+  // it registers (per spec) - wait for the registration to be fully
+  // active, then reload so *this* navigation is controlled and the
+  // install-time precache (engine .js/.wasm included) has actually run.
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.reload();
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, {
+    timeout: 15_000,
+  });
+
+  await context.setOffline(true);
+  try {
+    await page.reload();
+
+    await page.getByRole('button', { name: /play computer/i }).click();
+    await page
+      .getByRole('radiogroup', { name: /computer difficulty/i })
+      .getByText('Casual', { exact: true })
+      .click();
+    await page.getByRole('button', { name: /play as white/i }).click();
+
+    // The real, offline-served Stockfish Worker/WASM must still complete
+    // its handshake and reply - generous timeout for the same reason as
+    // the online test (WASM start-up), plus this hotfix's own widened
+    // handshake budget for a cold, cache-served start-up.
+    await expect(page.getByText(/white to move/i)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText('Casual')).toBeVisible();
+
+    await page.getByRole('gridcell', { name: /^e2,/ }).click();
+    await page.getByRole('gridcell', { name: /^e4(,|$)/ }).click();
+    await expect(page.getByText(/computer thinking/i)).toBeVisible();
+    await expect(page.getByText(/white to move/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('gridcell', { name: /^e2(,|$)/ })).toBeEnabled();
+  } finally {
+    await context.setOffline(false);
+  }
+});
+
 test('play computer as Black: the real engine moves first automatically', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /play computer/i }).click();

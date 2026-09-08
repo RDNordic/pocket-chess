@@ -51,8 +51,22 @@ function defaultWorkerFactory(): EngineWorkerLike {
 
 /** How long to wait for `uciok`/`readyok` before treating the engine as
  * unresponsive and moving to `error`. Generous: Stockfish's own startup
- * (WASM instantiation) can legitimately take a moment on a slow device. */
-const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
+ * (WASM instantiation) can legitimately take a moment on a slow device.
+ *
+ * Raised from an original 10s (build spec Phase 2A) to 15s as part of the
+ * `hotfix/play-computer-offline-regression` fix: the WASM has to be both
+ * *read* from the service worker's Cache Storage and *compiled* when
+ * offline, rather than compiled while streaming in over a fast network
+ * connection - both measurably slower on real mobile hardware than in
+ * local/CI testing, and WebKit/iOS Safari in particular has a documented
+ * history of Cache Storage read-path bugs and quirks around a
+ * newly-installed service worker's control of a page's own nested Workers
+ * (see the hotfix's commit message for citations) - either of which can
+ * plausibly push a cold, offline engine start-up past the original 10s
+ * budget in a way this project's own automated tests (which only ever
+ * exercise a fast in-memory fake Worker, or a real Worker on a fast
+ * desktop machine - see `tests/engine-integration/`) cannot reproduce. */
+const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000;
 
 /** How long to wait for the (to-be-discarded) `bestmove` of a search we've
  * sent `stop` for, before giving up on that UCI session and recovering by

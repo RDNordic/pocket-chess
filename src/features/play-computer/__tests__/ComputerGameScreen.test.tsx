@@ -32,17 +32,19 @@ class ImmediateFakeEngine implements ChessEngine {
   }
 }
 
-/** Engine whose `start()` rejects on its first instance (so the screen
- * reaches `engine-error`) and never settles on any later instance, so the
- * test can observe the Retry button staying disabled while a replacement
- * starts - used only for the Retry-button test below. */
+/** Engine whose `start()` rejects on its first two instances (so the
+ * screen's automatic startup retry - see useComputerGame's
+ * `STARTUP_ATTEMPT_LIMIT` - also fails, reaching `engine-error`) and never
+ * settles on any later instance, so the test can observe the Retry button
+ * staying disabled while a *manually retried* replacement starts - used
+ * only for the Retry-button test below. */
 class FailFirstThenHangEngine implements ChessEngine {
   state: ChessEngine['state'] = 'uninitialised';
 
-  constructor(private readonly isFirst: boolean) {}
+  constructor(private readonly shouldFail: boolean) {}
 
   async start(): Promise<void> {
-    if (this.isFirst) throw new Error('boom');
+    if (this.shouldFail) throw new Error('boom');
     return new Promise(() => {});
   }
 
@@ -62,7 +64,10 @@ class FailFirstThenHangEngine implements ChessEngine {
 function failThenHangEngineFactory(): { createEngine: () => ChessEngine } {
   let callCount = 0;
   return {
-    createEngine: () => new FailFirstThenHangEngine(++callCount === 1),
+    // The first two instances (the initial attempt plus the hook's own
+    // automatic retry) fail; every instance after that (the manual Retry
+    // button click this test exercises) hangs forever.
+    createEngine: () => new FailFirstThenHangEngine(++callCount <= 2),
   };
 }
 

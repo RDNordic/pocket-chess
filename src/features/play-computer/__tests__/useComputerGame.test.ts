@@ -219,14 +219,35 @@ describe('useComputerGame', () => {
     expect(result.current.snapshot.fen).toBe(fenBeforeFailure);
   });
 
-  it('an engine start-up failure surfaces a recoverable error without ever starting a game move', async () => {
+  it('an engine start-up failure surfaces a recoverable error, after one automatic retry, without ever starting a game move', async () => {
     const { createEngine, engines } = engineFactory();
     const { result } = renderHook(() => useComputerGame('black', { createEngine }));
 
+    // A cold start-up failure is retried automatically once, transparently
+    // (hotfix/play-computer-offline-regression) - only a *second* failure
+    // in the same session surfaces `engine-error` to the player.
     act(() => engines[0].rejectStart(new Error('timed out waiting for a response to "uci"')));
+    await waitFor(() => expect(engines).toHaveLength(2));
+    expect(result.current.phase).toBe('computer-thinking');
 
+    act(() => engines[1].rejectStart(new Error('timed out waiting for a response to "uci"')));
     await waitFor(() => expect(result.current.phase).toBe('engine-error'));
     expect(result.current.snapshot.history).toHaveLength(0);
+  });
+
+  it('an engine start-up failure that succeeds on the automatic retry never surfaces engine-error', async () => {
+    const { createEngine, engines } = engineFactory();
+    const { result } = renderHook(() => useComputerGame('black', { createEngine }));
+
+    act(() => engines[0].rejectStart(new Error('boom')));
+    await waitFor(() => expect(engines).toHaveLength(2));
+
+    act(() => engines[1].resolveStart());
+    await waitFor(() => expect(engines[1].findBestMoveCalls).toHaveLength(1));
+    expect(result.current.phase).toBe('computer-thinking');
+
+    act(() => engines[1].resolveMove('e2e4'));
+    await waitFor(() => expect(result.current.phase).toBe('player-turn'));
   });
 
   describe('lastComputerMove (last-computer-move board highlight state)', () => {
@@ -328,17 +349,21 @@ describe('useComputerGame', () => {
     const { createEngine, engines } = engineFactory();
     const { result } = renderHook(() => useComputerGame('black', { createEngine }));
 
+    // The initial mount gets one automatic retry (engines[1]) before
+    // engine-error surfaces - see the earlier "start-up failure" tests.
     act(() => engines[0].rejectStart(new Error('boom')));
+    await waitFor(() => expect(engines).toHaveLength(2));
+    act(() => engines[1].rejectStart(new Error('boom')));
     await waitFor(() => expect(result.current.phase).toBe('engine-error'));
 
     act(() => result.current.retry());
-    expect(engines[0].disposeCallCount).toBe(1);
-    expect(engines).toHaveLength(2);
+    expect(engines[1].disposeCallCount).toBe(1);
+    expect(engines).toHaveLength(3);
 
-    act(() => engines[1].resolveStart());
-    await waitFor(() => expect(engines[1].findBestMoveCalls).toHaveLength(1));
+    act(() => engines[2].resolveStart());
+    await waitFor(() => expect(engines[2].findBestMoveCalls).toHaveLength(1));
 
-    act(() => engines[1].resolveMove('e2e4'));
+    act(() => engines[2].resolveMove('e2e4'));
     await waitFor(() => expect(result.current.phase).toBe('player-turn'));
     expect(result.current.snapshot.history.map((m) => m.uci)).toEqual(['e2e4']);
   });
@@ -431,7 +456,11 @@ describe('useComputerGame', () => {
     const { createEngine, engines } = engineFactory();
     const { result } = renderHook(() => useComputerGame('black', { createEngine }));
 
+    // The initial mount gets one automatic retry (engines[1]) before
+    // engine-error surfaces - see the earlier "start-up failure" tests.
     act(() => engines[0].rejectStart(new Error('boom')));
+    await waitFor(() => expect(engines).toHaveLength(2));
+    act(() => engines[1].rejectStart(new Error('boom')));
     await waitFor(() => expect(result.current.phase).toBe('engine-error'));
 
     // Two calls in the same tick, as a double-tap before React re-renders
@@ -441,15 +470,15 @@ describe('useComputerGame', () => {
       result.current.retry();
     });
 
-    expect(engines[0].disposeCallCount).toBe(1);
-    expect(engines).toHaveLength(2);
+    expect(engines[1].disposeCallCount).toBe(1);
+    expect(engines).toHaveLength(3);
     expect(result.current.isRetrying).toBe(true);
 
-    act(() => engines[1].resolveStart());
-    await waitFor(() => expect(engines[1].findBestMoveCalls).toHaveLength(1));
-    expect(engines).toHaveLength(2);
+    act(() => engines[2].resolveStart());
+    await waitFor(() => expect(engines[2].findBestMoveCalls).toHaveLength(1));
+    expect(engines).toHaveLength(3);
 
-    act(() => engines[1].resolveMove('e2e4'));
+    act(() => engines[2].resolveMove('e2e4'));
     await waitFor(() => expect(result.current.phase).toBe('player-turn'));
     expect(result.current.isRetrying).toBe(false);
   });
@@ -499,12 +528,16 @@ describe('useComputerGame', () => {
       const { result } = renderHook(() => useComputerGame('black', { createEngine, sessionConfig }));
 
       act(() => engines[0].rejectStart(new Error('boom')));
+      await waitFor(() => expect(engines).toHaveLength(2));
+      // The automatic retry (see the "start-up failure" tests) also reuses
+      // the same sessionConfig - not just the later manual retry().
+      expect(engines[1].startConfigs[0]).toEqual({ difficulty: 'casual' });
+      act(() => engines[1].rejectStart(new Error('boom')));
       await waitFor(() => expect(result.current.phase).toBe('engine-error'));
-      expect(engines[0].startConfigs[0]).toEqual({ difficulty: 'casual' });
 
       act(() => result.current.retry());
-      await waitFor(() => expect(engines[1].startConfigs).toHaveLength(1));
-      expect(engines[1].startConfigs[0]).toEqual({ difficulty: 'casual' });
+      await waitFor(() => expect(engines[2].startConfigs).toHaveLength(1));
+      expect(engines[2].startConfigs[0]).toEqual({ difficulty: 'casual' });
     });
 
     it("player Black's opening computer move waits for the configured start() to resolve, not just any start()", async () => {
@@ -532,8 +565,10 @@ describe('useComputerGame', () => {
       );
 
       act(() => engines[0].rejectStart(new Error('boom')));
+      await waitFor(() => expect(engines).toHaveLength(2));
+      expect(engines[1].startConfigs[0]).toEqual({ difficulty: 'gentle' });
+      act(() => engines[1].rejectStart(new Error('boom')));
       await waitFor(() => expect(result.current.phase).toBe('engine-error'));
-      expect(engines[0].startConfigs[0]).toEqual({ difficulty: 'gentle' });
 
       // A later render supplies a different sessionConfig - the session was
       // already established at mount with 'gentle' and must not pick this
@@ -541,8 +576,8 @@ describe('useComputerGame', () => {
       rerender({ sessionConfig: { difficulty: 'strongest' } });
 
       act(() => result.current.retry());
-      await waitFor(() => expect(engines[1].startConfigs).toHaveLength(1));
-      expect(engines[1].startConfigs[0]).toEqual({ difficulty: 'gentle' });
+      await waitFor(() => expect(engines[2].startConfigs).toHaveLength(1));
+      expect(engines[2].startConfigs[0]).toEqual({ difficulty: 'gentle' });
     });
 
     it('mutating the caller-owned sessionConfig object in place does not change what retry() starts with', async () => {
@@ -551,16 +586,18 @@ describe('useComputerGame', () => {
       const { result } = renderHook(() => useComputerGame('black', { createEngine, sessionConfig }));
 
       act(() => engines[0].rejectStart(new Error('boom')));
+      await waitFor(() => expect(engines).toHaveLength(2));
+      expect(engines[1].startConfigs[0]).toEqual({ difficulty: 'gentle' });
+      act(() => engines[1].rejectStart(new Error('boom')));
       await waitFor(() => expect(result.current.phase).toBe('engine-error'));
-      expect(engines[0].startConfigs[0]).toEqual({ difficulty: 'gentle' });
 
       // Mutates the exact object reference the hook was given, after the
       // hook already snapshotted its value.
       sessionConfig.difficulty = 'strongest';
 
       act(() => result.current.retry());
-      await waitFor(() => expect(engines[1].startConfigs).toHaveLength(1));
-      expect(engines[1].startConfigs[0]).toEqual({ difficulty: 'gentle' });
+      await waitFor(() => expect(engines[2].startConfigs).toHaveLength(1));
+      expect(engines[2].startConfigs[0]).toEqual({ difficulty: 'gentle' });
     });
 
     it('a fresh session (a new hook instance) can use a different difficulty than a previous one', async () => {
