@@ -2,12 +2,18 @@ import { useState } from 'react';
 import { Board } from '../../components/board/Board';
 import type { BoardOrientation } from '../../components/board/boardGeometry';
 import type { PlayerColour } from '../../chess/chessTypes';
+import type { EngineDifficulty } from '../../engine/engineTypes';
 import { describeGameOutcome } from '../../chess/gameResult';
+import { DIFFICULTY_LABELS } from './engineDifficultyLabels';
 import { useComputerGame, type UseComputerGameOptions } from './useComputerGame';
 import styles from './ComputerGameScreen.module.css';
 
 interface ComputerGameScreenProps {
   playerColour: PlayerColour;
+  /** Fixed for the whole game - chosen on the colour-select screen. No
+   * in-game control changes it; a new game picks its own via a fresh
+   * mount of this screen. */
+  difficulty: EngineDifficulty;
   onExit: () => void;
   /** Test-only injection point (a fake `ChessEngine`, shorter movetime) -
    * never set in the real app, where `useComputerGame`'s own defaults
@@ -29,7 +35,13 @@ function statusText(
  * chess rules or engine/UCI details live here, only interaction wiring and
  * status text (build spec section 6's presentation-layer boundary).
  */
-export function ComputerGameScreen({ playerColour, onExit, engineOptions }: ComputerGameScreenProps) {
+export function ComputerGameScreen({
+  playerColour,
+  difficulty,
+  onExit,
+  engineOptions,
+}: ComputerGameScreenProps) {
+  const sessionConfig = engineOptions?.sessionConfig ?? { difficulty };
   const {
     snapshot,
     selectedSquare,
@@ -42,7 +54,7 @@ export function ComputerGameScreen({ playerColour, onExit, engineOptions }: Comp
     move,
     retry,
     requiresPromotion,
-  } = useComputerGame(playerColour, engineOptions);
+  } = useComputerGame(playerColour, { ...engineOptions, sessionConfig });
   const [orientation, setOrientation] = useState<BoardOrientation>(playerColour);
 
   const isGameOver = phase === 'game-over';
@@ -55,6 +67,7 @@ export function ComputerGameScreen({ playerColour, onExit, engineOptions }: Comp
           Back
         </button>
         <h1>Play computer</h1>
+        <span className={styles.difficultyBadge}>{DIFFICULTY_LABELS[difficulty]}</span>
       </header>
 
       <p className={styles.status} aria-live="polite">

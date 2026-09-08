@@ -51,14 +51,10 @@ describe('parseUciLine', () => {
     });
   });
 
-  it('treats irrelevant UCI lines (id/option/info/banner) as unknown', () => {
+  it('treats irrelevant UCI lines (id/info/banner) as unknown', () => {
     expect(parseUciLine('id name Stockfish 18')).toEqual({
       type: 'unknown',
       line: 'id name Stockfish 18',
-    });
-    expect(parseUciLine('option name Threads type spin default 1 min 1 max 1024')).toEqual({
-      type: 'unknown',
-      line: 'option name Threads type spin default 1 min 1 max 1024',
     });
     expect(parseUciLine('info depth 10 seldepth 14 multipv 1 score cp 25')).toEqual({
       type: 'unknown',
@@ -67,6 +63,39 @@ describe('parseUciLine', () => {
     expect(parseUciLine('Stockfish 18 by the Stockfish developers')).toEqual({
       type: 'unknown',
       line: 'Stockfish 18 by the Stockfish developers',
+    });
+  });
+
+  it('parses a spin option line with default/min/max (e.g. "Skill Level")', () => {
+    expect(parseUciLine('option name Skill Level type spin default 20 min 0 max 20')).toEqual({
+      type: 'option',
+      name: 'Skill Level',
+      optionType: 'spin',
+      default: '20',
+      min: 0,
+      max: 20,
+    });
+  });
+
+  it('parses a check option line with only a default (e.g. "UCI_LimitStrength")', () => {
+    expect(parseUciLine('option name UCI_LimitStrength type check default false')).toEqual({
+      type: 'option',
+      name: 'UCI_LimitStrength',
+      optionType: 'check',
+      default: 'false',
+      min: undefined,
+      max: undefined,
+    });
+  });
+
+  it('parses an option name unrelated to the two this project cares about the same generic way', () => {
+    expect(parseUciLine('option name Threads type spin default 1 min 1 max 1024')).toEqual({
+      type: 'option',
+      name: 'Threads',
+      optionType: 'spin',
+      default: '1',
+      min: 1,
+      max: 1024,
     });
   });
 

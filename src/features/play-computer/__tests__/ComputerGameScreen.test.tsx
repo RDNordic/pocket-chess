@@ -72,6 +72,7 @@ describe('ComputerGameScreen', () => {
     render(
       <ComputerGameScreen
         playerColour="white"
+        difficulty="gentle"
         onExit={() => {}}
         engineOptions={{ createEngine: () => new ImmediateFakeEngine('e7e5') }}
       />,
@@ -92,6 +93,7 @@ describe('ComputerGameScreen', () => {
     render(
       <ComputerGameScreen
         playerColour="black"
+        difficulty="gentle"
         onExit={() => {}}
         engineOptions={{ createEngine: () => new ImmediateFakeEngine('e2e4') }}
       />,
@@ -107,7 +109,12 @@ describe('ComputerGameScreen', () => {
     const user = userEvent.setup();
     const { createEngine } = failThenHangEngineFactory();
     render(
-      <ComputerGameScreen playerColour="white" onExit={() => {}} engineOptions={{ createEngine }} />,
+      <ComputerGameScreen
+        playerColour="white"
+        difficulty="gentle"
+        onExit={() => {}}
+        engineOptions={{ createEngine }}
+      />,
     );
 
     const retryButton = await screen.findByRole('button', { name: /retry/i });
@@ -125,6 +132,7 @@ describe('ComputerGameScreen', () => {
     render(
       <ComputerGameScreen
         playerColour="white"
+        difficulty="gentle"
         onExit={() => {
           exited = true;
         }}
@@ -134,5 +142,40 @@ describe('ComputerGameScreen', () => {
 
     await user.click(screen.getByRole('button', { name: /back to home/i }));
     expect(exited).toBe(true);
+  });
+
+  it('renders a compact badge for the active difficulty', async () => {
+    render(
+      <ComputerGameScreen
+        playerColour="white"
+        difficulty="challenging"
+        onExit={() => {}}
+        engineOptions={{ createEngine: () => new ImmediateFakeEngine('e7e5') }}
+      />,
+    );
+
+    expect(await screen.findByText('Challenging')).toBeInTheDocument();
+  });
+
+  it('passes the difficulty prop through to the engine as a sessionConfig, not a raw engineOptions override', async () => {
+    let receivedConfig: unknown;
+    class RecordingFakeEngine extends ImmediateFakeEngine {
+      async start(config?: unknown): Promise<void> {
+        receivedConfig = config;
+        return super.start();
+      }
+    }
+
+    render(
+      <ComputerGameScreen
+        playerColour="white"
+        difficulty="casual"
+        onExit={() => {}}
+        engineOptions={{ createEngine: () => new RecordingFakeEngine('e7e5') }}
+      />,
+    );
+
+    await screen.findByText(/white to move/i);
+    expect(receivedConfig).toEqual({ difficulty: 'casual' });
   });
 });
