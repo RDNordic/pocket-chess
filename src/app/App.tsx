@@ -18,6 +18,12 @@ export function App() {
   // colour-select screen (build spec phase 3A). Mirrors that screen's own
   // 'gentle' default so it's correct even before the route is reached.
   const [computerDifficulty, setComputerDifficulty] = useState<EngineDifficulty>('gentle');
+  // Bumped on every "Rematch" (build spec phase 3B) so React's own `key`
+  // mechanism fully remounts ComputerGameScreen - a fresh useComputerGame
+  // hook instance, fresh ChessGame, fresh engine session - reusing exactly
+  // the same mount-time initialisation an ordinary new game already relies
+  // on, rather than a second, parallel in-place reset path.
+  const [computerGameSessionKey, setComputerGameSessionKey] = useState(0);
 
   if (route === 'play-local') {
     return <PlayLocalScreen onExit={() => setRoute('home')} />;
@@ -39,9 +45,12 @@ export function App() {
   if (route === 'play-computer') {
     return (
       <ComputerGameScreen
+        key={computerGameSessionKey}
         playerColour={computerPlayerColour}
         difficulty={computerDifficulty}
         onExit={() => setRoute('home')}
+        onNewGame={() => setRoute('play-computer-colour')}
+        onRematch={() => setComputerGameSessionKey((count) => count + 1)}
       />
     );
   }

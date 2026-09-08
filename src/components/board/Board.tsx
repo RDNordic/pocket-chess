@@ -16,6 +16,12 @@ interface BoardProps {
    * local two-player), which simply renders no highlight. */
   lastComputerMove?: { from: SquareId; to: SquareId } | null;
   interactionDisabled?: boolean;
+  /** Bumped by the caller to force-close any open promotion dialog (e.g.
+   * after a takeback) - `pendingPromotion` is otherwise owned entirely by
+   * this component, so an external caller has no other way to clear it.
+   * Optional and unused by callers (e.g. `PlayLocalScreen`) that never need
+   * to reach in like this. */
+  resetSignal?: number;
   onSelectSquare: (square: SquareId) => void;
   onMove: (from: SquareId, to: SquareId, promotion?: PromotionPiece) => void;
   /**
@@ -38,6 +44,7 @@ export function Board({
   selectedSquare,
   lastComputerMove,
   interactionDisabled = false,
+  resetSignal,
   onSelectSquare,
   onMove,
   requiresPromotion,
@@ -110,6 +117,17 @@ export function Board({
       promotionOriginRef.current = null;
     }
   }, [pendingPromotion]);
+
+  // Force-closes any open promotion dialog whenever the caller bumps
+  // `resetSignal` (e.g. a takeback) - deliberately keyed only on the signal
+  // itself, not `pendingPromotion`, so this never fights the dialog's own
+  // normal open/close transitions; it only ever reacts to an external
+  // "start over" request. Runs once harmlessly on mount too, since
+  // `pendingPromotion` already starts `null` there.
+  useEffect(() => {
+    setPendingPromotion(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetSignal]);
 
   return (
     <div className={styles.board} role="grid" aria-label="Chess board">

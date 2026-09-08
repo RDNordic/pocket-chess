@@ -56,13 +56,27 @@
 
 .controls {
   display: flex;
+  /* Phase 3B added several more controls (takeback/resign/rematch/new
+     game) alongside the original retry/flip pair - more than fit in one
+     row at a comfortable tap size on an iPhone-width viewport, so this
+     wraps to a second row there instead of squeezing every button down to
+     an unreadable/untappable width. `justify-content: center` keeps a
+     short final row (e.g. just "New game" alone) centred rather than
+     pinned to the left edge. */
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 0.5rem;
   width: min(96vw, 640px);
   padding-inline: 0.75rem;
 }
 
 .controls button {
-  flex: 1;
+  /* `1 1 auto` with a `min-width`, not a bare `flex: 1` (which would fight
+     wrapping by always trying to fill the remaining row width) - each
+     button keeps a legible, comfortably-tappable minimum size and only
+     grows to share leftover space within its own row. */
+  flex: 1 1 auto;
+  min-width: 6rem;
   min-height: 44px;
   border-radius: 8px;
   border: 1px solid var(--color-surface);

@@ -37,7 +37,7 @@ quick reference:
   etc.) without verifying they're genuinely required against real build
   output/browser behaviour first.
 
-## Current architecture (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + release hygiene + Phase 2A + Phase 2B + Phase 3A + offline regression hotfix, merged; Board Piece Theme v1 on a branch, pending review - see below)
+## Current architecture (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + release hygiene + Phase 2A + Phase 2B + Phase 3A + offline regression hotfix + Board Piece Theme v1, all merged and physically accepted; Phase 3B (practice-game controls) on a branch, pending review - see below)
 
 ```text
 src/
@@ -173,15 +173,19 @@ recovery for free. The difficulty -> Skill Level mapping lives in one file
 `EngineDifficulty` label. `ColourSelectScreen` now also picks a difficulty
 (default Gentle for new games, fixed for the session), and
 `ComputerGameScreen` shows a compact badge for the active one.
-Board Piece Theme v1 (implemented, pending review, branch
-`feature/board-piece-theme-v1`) is a UX/presentation-only slice - no
-engine/chess-rule/offline/privacy changes. See next-steps.md's own entry
-for full detail; in short: local "cburnett" SVG piece artwork
-(`src/components/board/pieces/`, GPLv2+, recoloured only) replaces the
-previous Unicode glyphs, rendered through one centralised mapping
-(`pieceAssets.ts`), and `vite.config.ts` now disables asset inlining
-(`assetsInlineLimit: 0`) so small local assets are never turned into
-CSP-incompatible `data:` URIs.
+Board Piece Theme v1 is merged and physically accepted on iPhone - a
+UX/presentation-only slice, no engine/chess-rule/offline/privacy changes.
+See next-steps.md's own entry for full detail; in short: local "cburnett"
+SVG piece artwork (`src/components/board/pieces/`, GPLv2+, recoloured
+only) replaces the previous Unicode glyphs, rendered through one
+centralised mapping (`pieceAssets.ts`), and `vite.config.ts` now disables
+asset inlining (`assetsInlineLimit: 0`) so small local assets are never
+turned into CSP-incompatible `data:` URIs.
+Phase 3B (practice-game controls - take back, resign, new game, rematch)
+is implemented on branch `feature/practice-game-controls-v1`, pending
+independent review and physical-device acceptance - not yet merged. See
+next-steps.md's own entry for full detail. Play Computer only; Play Local
+is untouched.
 
 ## Working rules for this repo
 

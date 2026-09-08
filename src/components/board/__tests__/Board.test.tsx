@@ -14,7 +14,7 @@ import { pieceAssetUrl } from '../pieceAssets';
  * lives only in test code - production code has no way to load an
  * arbitrary FEN yet.
  */
-function PromotionHarness({ fen }: { fen: string }) {
+function PromotionHarness({ fen, resetSignal }: { fen: string; resetSignal?: number }) {
   const [game] = useState(() => new ChessGame(fen));
   const [snapshot, setSnapshot] = useState<GameStateSnapshot>(() => game.getSnapshot());
   const [selectedSquare, setSelectedSquare] = useState<SquareId | null>(null);
@@ -43,6 +43,7 @@ function PromotionHarness({ fen }: { fen: string }) {
       orientation="white"
       legalTargets={legalTargets}
       selectedSquare={selectedSquare}
+      resetSignal={resetSignal}
       onSelectSquare={selectSquare}
       onMove={move}
       requiresPromotion={(from, to) => game.requiresPromotion(from, to)}
@@ -124,6 +125,21 @@ describe('Board promotion flow', () => {
     // The pawn never moved - promotion was cancelled.
     expect(screen.getByRole('gridcell', { name: /^e7,.*white pawn/i })).toBeInTheDocument();
     expect(destinationSquare).toHaveFocus();
+  });
+
+  it('a bumped resetSignal (e.g. a takeback) force-closes an open promotion dialog', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <PromotionHarness fen={ONE_STEP_FROM_PROMOTION_FEN} resetSignal={0} />,
+    );
+
+    await user.click(screen.getByRole('gridcell', { name: /^e7,/i }));
+    await user.click(screen.getByRole('gridcell', { name: /^e8(,|$)/i }));
+    await screen.findByRole('dialog');
+
+    rerender(<PromotionHarness fen={ONE_STEP_FROM_PROMOTION_FEN} resetSignal={1} />);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
 

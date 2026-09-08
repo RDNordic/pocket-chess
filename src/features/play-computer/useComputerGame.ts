@@ -118,6 +118,8 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
   // call in the same tick - before React has re-rendered with the
   // disabled button - still sees a retry already in flight and bails.
   const retryInFlightRef = useRef(false);
+  // Same synchronous-double-call guard as `retryInFlightRef`, for takeback.
+  const takebackInFlightRef = useRef(false);
 
   const [snapshot, setSnapshot] = useState<GameStateSnapshot>(() => game.getSnapshot());
   const [selectedSquare, setSelectedSquare] = useState<SquareId | null>(null);
@@ -126,6 +128,18 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
   );
   const [engineError, setEngineError] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [isTakingBack, setIsTakingBack] = useState(false);
+  // Bumped on every takeback so `Board` can force-close any open promotion
+  // dialog it owns - see `Board`'s own `resetSignal` prop doc comment.
+  const [boardResetSignal, setBoardResetSignal] = useState(0);
+  // Set only by `resign()`. `ChessGame`/chess.js has no notion of
+  // resignation (build spec section 17/phase 3B: "do not manufacture a
+  // chess.js checkmate position") - this is a pure application-layer
+  // overlay applied to the *returned* snapshot's outcome only, right at
+  // this hook's own return statement below, so every internal reference to
+  // `snapshot/game` elsewhere in this hook keeps working against the real,
+  // unmodified chess.js-derived state.
+  const [resignedWinner, setResignedWinner] = useState<PlayerColour | null>(null);
   // The engine's most recently *successfully applied* move (for the "last
   // computer move" board highlight) - set only where the engine's proposed
   // move has already passed `game.applyUciMove()`'s validation below, never
@@ -155,6 +169,22 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
     if (!selectedSquare) return [];
     return game.legalDestinations(selectedSquare);
   }, [game, selectedSquare, snapshot]);
+
+  /** Whether there is a previous player decision left to restore.
+   * `baseline` is the one ply that is never eligible for takeback: when
+   * the player is Black, the computer's forced opening move (ply 0) must
+   * always survive a takeback of the player's first move, so the floor is
+   * 1 ply instead of 0. Derived from `ChessGame`'s own authoritative
+   * `history` (`game.history.length`), not a parallel counter - `snapshot`
+   * is only this memo's re-run trigger, since `game.history` is otherwise
+   * not itself reactive. Resignation always disables takeback outright
+   * (build spec phase 3B: "do not allow it after resignation in this
+   * slice"), regardless of history length. */
+  const canTakeback = useMemo(() => {
+    if (resignedWinner) return false;
+    const baseline = playerColour === 'black' ? 1 : 0;
+    return game.history.length > baseline;
+  }, [game, snapshot, playerColour, resignedWinner]);
 
   /** Asks the engine for a move in `fen` and applies it once validated
    * through `ChessGame`. Never trusts the engine's move on its own - an
@@ -348,22 +378,121 @@ export function useComputerGame(playerColour: PlayerColour, options: UseComputer
     });
   }, [phase, initialiseEngine, disposeCurrentEngine]);
 
+  /** Returns the player to their previous decision point: undoes the
+   * engine's latest reply and the player's preceding move so play resumes
+   * exactly where the player last had a choice - or, while the engine is
+   * still searching after a player move, safely cancels that search and
+   * undoes only the player's move (there is no engine reply yet to also
+   * remove). Available from every phase (`player-turn`, `computer-
+   * thinking`, `engine-error`, and a board-derived `game-over`) as long as
+   * `canTakeback` holds; the only phase that permanently disables it is a
+   * resignation (`canTakeback` itself already accounts for that).
+   *
+   * Ply count: whoever made the *last* move in `game.history` decides it.
+   * If it was the player's own move (an in-flight search, an engine
+   * failure while replying, or the player's move itself ending the game),
+   * exactly one ply is undone. If it was the engine's (a completed reply,
+   * or an engine move that ended the game), two plies are undone - its
+   * reply and the player's move before it. Either way this always lands
+   * exactly on "the player's turn to decide" - never mid-search, never
+   * mid-terminal, and (via `canTakeback`'s own floor) never before the
+   * computer's opening move when the player is Black.
+   *
+   * Engine handling deliberately does not try to distinguish "cancel an
+   * active search" from "the engine was already disposed (game-over)" from
+   * "the engine is stuck in `error`" as separate cases: `disposeCurrentEngine`
+   * is already safe to call from any of those (idempotent, and it rejects/
+   * ignores any outstanding work via the same session-token bump every
+   * other transition in this hook already relies on - see its own doc
+   * comment), and `initialiseEngine` already knows how to bring up a fresh,
+   * ready engine (with its own automatic retry-once) and land on
+   * `player-turn` once `game.turn === playerColour`, which undoing up to
+   * and including the player's own last move always guarantees. Reusing
+   * both exactly as `retry()` does keeps takeback's engine handling on the
+   * same already-hardened path rather than a second, parallel one. */
+  const takeback = useCallback(() => {
+    if (!canTakeback) return;
+    if (takebackInFlightRef.current) return;
+    takebackInFlightRef.current = true;
+    setIsTakingBack(true);
+    // Disables the board and shows a busy state for the async engine
+    // restart below, exactly like `requestComputerMove` already does for
+    // an ordinary search - `computer-thinking` is the closest existing
+    // phase bucket for "the board is not interactive right now"; the
+    // screen layer is what turns this specific case into more accurate
+    // status wording (see `ComputerGameScreen`'s own `isTakingBack` check).
+    setPhase('computer-thinking');
+    setEngineError(null);
+    setSelectedSquare(null);
+    setLastComputerMove(null);
+    setBoardResetSignal((count) => count + 1);
+
+    const history = game.history;
+    const lastMoverColour: PlayerColour = (history.length - 1) % 2 === 0 ? 'white' : 'black';
+    const pliesToUndo = lastMoverColour === playerColour ? 1 : 2;
+    for (let i = 0; i < pliesToUndo; i += 1) {
+      game.undoLastMove();
+    }
+    setSnapshot(game.getSnapshot());
+
+    disposeCurrentEngine();
+    void initialiseEngine().finally(() => {
+      takebackInFlightRef.current = false;
+      if (mountedRef.current) setIsTakingBack(false);
+    });
+  }, [canTakeback, game, playerColour, disposeCurrentEngine, initialiseEngine]);
+
+  /** Ends the game immediately with an explicit resignation result - the
+   * computer as winner - without ever asking `ChessGame` to reach a
+   * chess-rules terminal state it hasn't actually reached (build spec
+   * phase 3B: "do not manufacture a chess.js checkmate position").
+   * `resignedWinner` is applied only as an overlay on the *returned*
+   * snapshot's outcome (see the return statement below) - `chess`/`game`
+   * itself is never touched, so its own history/FEN stay exactly what
+   * they were at the moment of resignation, ready for a takeback to
+   * restore correctly if the game is later un-resigned by one. Confirming
+   * the resignation itself is a UI concern (see `ComputerGameScreen`'s
+   * `ConfirmDialog`), not this hook's job - by the time this is called the
+   * decision has already been made. A no-op once the game has already
+   * ended, so a stray repeat call (e.g. a slow double-tap past the
+   * confirm dialog) cannot re-resign or re-dispose anything. */
+  const resign = useCallback(() => {
+    if (phase === 'game-over') return;
+    disposeCurrentEngine();
+    setResignedWinner(playerColour === 'white' ? 'black' : 'white');
+    setPhase('game-over');
+    setSelectedSquare(null);
+    setBoardResetSignal((count) => count + 1);
+  }, [phase, playerColour, disposeCurrentEngine]);
+
   const requiresPromotion = useCallback(
     (from: SquareId, to: SquareId) => game.requiresPromotion(from, to),
     [game],
   );
 
+  // Applied only here, at the boundary - `snapshot` itself (used
+  // everywhere above) stays the real, unmodified chess.js-derived state;
+  // only what this hook *returns* to the UI shows the resignation.
+  const displayedSnapshot: GameStateSnapshot = resignedWinner
+    ? { ...snapshot, outcome: { status: 'resigned', winner: resignedWinner } }
+    : snapshot;
+
   return {
-    snapshot,
+    snapshot: displayedSnapshot,
     selectedSquare,
     legalTargets,
     phase,
     engineError,
     isRetrying,
+    isTakingBack,
+    canTakeback,
+    boardResetSignal,
     lastComputerMove,
     selectSquare,
     move,
     retry,
+    takeback,
+    resign,
     requiresPromotion,
   };
 }

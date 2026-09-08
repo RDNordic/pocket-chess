@@ -110,6 +110,52 @@ test('offline regression (hotfix/play-computer-offline-regression): Play Compute
   }
 });
 
+test('practice controls (Phase 3B): take back a completed reply, then resign and rematch, against the real engine', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /play computer/i }).click();
+  await page.getByRole('button', { name: /play as white/i }).click();
+  await expect(page.getByText(/white to move/i)).toBeVisible();
+
+  await page.getByRole('gridcell', { name: /^e2,/ }).click();
+  await page.getByRole('gridcell', { name: /^e4(,|$)/ }).click();
+  await expect(page.getByText(/white to move/i)).toBeVisible({ timeout: 15_000 });
+
+  const takebackButton = page.getByRole('button', { name: /^take back$/i });
+  await expect(takebackButton).toBeEnabled();
+  await takebackButton.click();
+
+  // The real engine's session is torn down and rebuilt - back to the
+  // starting position, e2's pawn restored, take back disabled again since
+  // there is nothing left to restore. Generous timeout: this rebuilds a
+  // real Worker/WASM session, the same cost as the initial start-up.
+  await expect(page.getByRole('gridcell', { name: /^e2,.*white pawn/i })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByRole('gridcell', { name: /^e4,.*white pawn/i })).not.toBeVisible();
+  await expect(page.getByText(/white to move/i)).toBeVisible();
+  await expect(takebackButton).toBeDisabled();
+
+  // The restored session must still work normally afterwards.
+  await page.getByRole('gridcell', { name: /^e2,/ }).click();
+  await page.getByRole('gridcell', { name: /^e4(,|$)/ }).click();
+  await expect(page.getByText(/white to move/i)).toBeVisible({ timeout: 15_000 });
+
+  await page.getByRole('button', { name: /^resign$/i }).click();
+  const dialog = page.getByRole('alertdialog', { name: /resign this game/i });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: /^resign$/i }).click();
+  await expect(page.getByText(/black wins by resignation/i)).toBeVisible();
+  await expect(page.getByRole('gridcell', { name: /^e4,.*white pawn/i })).toBeDisabled();
+
+  // Rematch starts a fresh game with the same colour (White moves first).
+  await page.getByRole('button', { name: /rematch/i }).click();
+  await expect(page.getByText(/white to move/i)).toBeVisible();
+  await expect(page.getByRole('gridcell', { name: /^e2,.*white pawn/i })).toBeVisible();
+  await expect(page.getByRole('gridcell', { name: /^e2,/ })).toBeEnabled();
+});
+
 test('play computer as Black: the real engine moves first automatically', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /play computer/i }).click();

@@ -38,15 +38,15 @@ UI rather than inferring it from disabled buttons. One fixed search time
 (1000ms) - no difficulty UI yet, that is Phase 3. Local two-player is
 unchanged.
 
-## Phase 3A: adjustable bot strength - merged, offline regression hotfixed
+## Phase 3A: adjustable bot strength - done, physically accepted
 
 Reference: pocket-chess-build-spec.md section 14. Reviewed (GO obtained)
 and merged to `main`. Physical iPhone testing in Airplane Mode then found
 Play Computer failing offline in production - see the
-"Offline Play Computer regression hotfix" entry below for the fix. Still
-outstanding before this slice can be called fully done: re-running the
-physical-iPhone + offline acceptance check against a fresh deploy that
-includes the hotfix. This is a scoped-down slice of
+"Offline Play Computer regression hotfix" entry below for the fix, which
+has since been re-validated on a physical iPhone in Airplane Mode against
+a fresh deploy: Play Computer now works both online and offline in
+production. This is a scoped-down slice of
 Phase 3 - only the Stockfish `Skill Level` UCI option (`UCI_LimitStrength`
 explicitly `false`), not `UCI_Elo`/rating estimation. Four **provisional**
 presets (`gentle`=0, `casual`=5, `challenging`=10, `strongest`=20 - see
@@ -61,10 +61,11 @@ and every Worker-restart recovery path, so the selected strength survives
 recovery without any separate code path. The pre-game colour-select screen
 (`ColourSelectScreen`) now also picks a difficulty (default Gentle for new
 games), fixed for the session; a compact badge in `ComputerGameScreen`
-shows the active label. Still deferred to a later Phase 3B: random colour
-selection, undo/resign/restart, and any player-facing rating estimate.
+shows the active label. Take back/resign/new game/rematch followed in
+Phase 3B (below); random colour selection and any player-facing rating
+estimate remain unstarted (see "Deferred" below).
 
-## Offline Play Computer regression hotfix - implemented, pending review
+## Offline Play Computer regression hotfix - merged, physically accepted
 
 Reference: branch `hotfix/play-computer-offline-regression`, off `main`
 (includes the merged Phase 3A). Physical iPhone testing in Airplane Mode
@@ -98,9 +99,9 @@ worker + Cache Storage + real Worker/WASM with the network hard-disabled.
 Physical iPhone Airplane Mode validation against a deployed build has
 since passed - Play Computer works both online and offline in production.
 
-## Board Piece Theme v1 - implemented, pending review
+## Board Piece Theme v1 - merged, deployed, physically accepted on iPhone
 
-Reference: branch `feature/board-piece-theme-v1`, off `main`. UX/
+Reference: merged to `main` from `feature/board-piece-theme-v1`. UX/
 presentation-only slice - no chess-rule, engine, offline, or privacy
 changes. Replaces the previous Unicode/system-font piece glyphs
 (`src/components/board/pieceGlyphs.ts`, removed) with the "cburnett"
@@ -126,6 +127,42 @@ are always emitted as real same-origin files rather than inlined as
 block - this was caught and fixed during this slice, not a pre-existing
 issue. No CSP directive itself was changed/weakened.
 
+## Phase 3B: practice-game controls - implemented, pending review and physical acceptance
+
+Reference: pocket-chess-build-spec.md section 17 (undo behaviour), branch
+`feature/practice-game-controls-v1`, off `main`. Play Computer only - no
+engine/chess-rule/offline/privacy changes; Play Local is untouched. Adds:
+
+- **Take back**: `ChessGame.undoLastMove()` (already existed, unused
+  until now) undoes 1 ply if the player's own move was last (an active
+  search, an engine failure, or the player's move ended the game) or 2
+  plies if the computer's reply was last (a completed reply, or an
+  engine move that ended the game) - a single rule, driven purely by
+  `ChessGame.history`, that always lands back on "the player's turn to
+  decide" from every phase. Disabled with nothing to restore, and (for a
+  Black-playing player) never undoes the computer's forced opening move.
+  Always tears down and rebuilds the engine session (reusing the same
+  retry-hardened start-up path `retry()` already relies on) rather than
+  trying to distinguish "cancel a search" from "the engine was already
+  disposed" from "the engine errored" as separate cases.
+- **Resign**: a small `ConfirmDialog` (new, generic - also used by New
+  game), then an explicit `{ status: 'resigned', winner }` outcome
+  applied only as an overlay on the returned snapshot -
+  `ChessGame`/chess.js itself is never told the game ended (its own
+  `GameOutcome`/`describeGameOutcome` already had a `resigned` variant
+  built in, unused until now). Disables takeback.
+- **New game**: returns to colour/difficulty setup (`onNewGame`, routed
+  by `App.tsx`); confirms first unless the game has already ended.
+- **Rematch**: offered once the game ends; `App.tsx` bumps a `key` on
+  `ComputerGameScreen` to force a full remount with the same
+  `playerColour`/`difficulty` - reuses this screen's existing mount-time
+  initialisation rather than a second, parallel in-place reset path.
+
+`Board` gained an optional `resetSignal` prop so a caller (takeback) can
+force-close an open promotion dialog it doesn't otherwise have access to;
+unused by `PlayLocalScreen`. Not yet reviewed, and not yet checked against
+a physical iPhone/deployed build.
+
 ## Production bug fix: WASM blocked by CSP - done
 
 Production (unlike local validation) blocked `WebAssembly.instantiate()`
@@ -136,11 +173,10 @@ allowance, not the broader `unsafe-eval`. No other CSP directive changed.
 
 ## Deferred (do not start yet)
 
-- Phase 3B: the rest of build spec Phase 3 - player Elo
-  estimation/rating display, undo/resign/restart polish for the
-  computer-game flow, random colour selection. (Skill Level difficulty is
-  merged - see Phase 3A above. Phase 3B
-  should not start until Phase 3A is reviewed and merged.)
+- The remaining, still-unstarted part of build spec Phase 3 - player Elo
+  estimation/rating display, and random colour selection. (Skill Level
+  difficulty is merged - Phase 3A above; take back/resign/new
+  game/rematch are merged - Phase 3B above.)
 - Phase 4: IndexedDB persistence (settings, games, puzzle progress).
 - Phase 5: puzzle pipeline (Lichess CC0 dataset preprocessing script,
   ~5,000 bundled puzzles, puzzle session logic).

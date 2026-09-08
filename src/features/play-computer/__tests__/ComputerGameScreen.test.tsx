@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ChessEngine } from '../../../engine/ChessEngine';
 import type { EngineMove, SearchLimits } from '../../../engine/engineTypes';
@@ -79,6 +79,8 @@ describe('ComputerGameScreen', () => {
         playerColour="white"
         difficulty="gentle"
         onExit={() => {}}
+        onNewGame={() => {}}
+        onRematch={() => {}}
         engineOptions={{ createEngine: () => new ImmediateFakeEngine('e7e5') }}
       />,
     );
@@ -100,6 +102,8 @@ describe('ComputerGameScreen', () => {
         playerColour="black"
         difficulty="gentle"
         onExit={() => {}}
+        onNewGame={() => {}}
+        onRematch={() => {}}
         engineOptions={{ createEngine: () => new ImmediateFakeEngine('e2e4') }}
       />,
     );
@@ -118,6 +122,8 @@ describe('ComputerGameScreen', () => {
         playerColour="white"
         difficulty="gentle"
         onExit={() => {}}
+        onNewGame={() => {}}
+        onRematch={() => {}}
         engineOptions={{ createEngine }}
       />,
     );
@@ -141,6 +147,8 @@ describe('ComputerGameScreen', () => {
         onExit={() => {
           exited = true;
         }}
+        onNewGame={() => {}}
+        onRematch={() => {}}
         engineOptions={{ createEngine: () => new ImmediateFakeEngine('e7e5') }}
       />,
     );
@@ -155,6 +163,8 @@ describe('ComputerGameScreen', () => {
         playerColour="white"
         difficulty="challenging"
         onExit={() => {}}
+        onNewGame={() => {}}
+        onRematch={() => {}}
         engineOptions={{ createEngine: () => new ImmediateFakeEngine('e7e5') }}
       />,
     );
@@ -176,11 +186,175 @@ describe('ComputerGameScreen', () => {
         playerColour="white"
         difficulty="casual"
         onExit={() => {}}
+        onNewGame={() => {}}
+        onRematch={() => {}}
         engineOptions={{ createEngine: () => new RecordingFakeEngine('e7e5') }}
       />,
     );
 
     await screen.findByText(/white to move/i);
     expect(receivedConfig).toEqual({ difficulty: 'casual' });
+  });
+
+  describe('Phase 3B: resign', () => {
+    it('cancelling the confirmation leaves the game untouched', async () => {
+      const user = userEvent.setup();
+      render(
+        <ComputerGameScreen
+          playerColour="white"
+          difficulty="gentle"
+          onExit={() => {}}
+          onNewGame={() => {}}
+          onRematch={() => {}}
+          engineOptions={{ createEngine: () => new ImmediateFakeEngine('e7e5') }}
+        />,
+      );
+      await screen.findByText(/white to move/i);
+
+      await user.click(screen.getByRole('button', { name: /^resign$/i }));
+      const dialog = await screen.findByRole('alertdialog', { name: /resign this game/i });
+      await user.click(within(dialog).getByRole('button', { name: /cancel/i }));
+
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(screen.getByText(/white to move/i)).toBeInTheDocument();
+    });
+
+    it('confirming ends the game with an explicit resignation result', async () => {
+      const user = userEvent.setup();
+      render(
+        <ComputerGameScreen
+          playerColour="white"
+          difficulty="gentle"
+          onExit={() => {}}
+          onNewGame={() => {}}
+          onRematch={() => {}}
+          engineOptions={{ createEngine: () => new ImmediateFakeEngine('e7e5') }}
+        />,
+      );
+      await screen.findByText(/white to move/i);
+
+      await user.click(screen.getByRole('button', { name: /^resign$/i }));
+      const dialog = await screen.findByRole('alertdialog', { name: /resign this game/i });
+      await user.click(within(dialog).getByRole('button', { name: /^resign$/i }));
+
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(await screen.findByText(/black wins by resignation/i)).toBeInTheDocument();
+      // The board is disabled once the game has ended, same as any other
+      // terminal state.
+      expect(screen.getByRole('gridcell', { name: /^e2,/i })).toBeDisabled();
+    });
+  });
+
+  describe('Phase 3B: new game / rematch', () => {
+    it('New game confirms before abandoning an in-progress game', async () => {
+      const user = userEvent.setup();
+      let newGameCalls = 0;
+      render(
+        <ComputerGameScreen
+          playerColour="white"
+          difficulty="gentle"
+          onExit={() => {}}
+          onNewGame={() => {
+            newGameCalls += 1;
+          }}
+          onRematch={() => {}}
+          engineOptions={{ createEngine: () => new ImmediateFakeEngine('e7e5') }}
+        />,
+      );
+      await screen.findByText(/white to move/i);
+
+      await user.click(screen.getByRole('button', { name: /new game/i }));
+      const dialog = await screen.findByRole('alertdialog', { name: /start a new game/i });
+      await user.click(within(dialog).getByRole('button', { name: /cancel/i }));
+      expect(newGameCalls).toBe(0);
+
+      await user.click(screen.getByRole('button', { name: /new game/i }));
+      const secondDialog = await screen.findByRole('alertdialog', { name: /start a new game/i });
+      await user.click(within(secondDialog).getByRole('button', { name: /new game/i }));
+      expect(newGameCalls).toBe(1);
+    });
+
+    it('New game skips confirmation once the game has already ended', async () => {
+      const user = userEvent.setup();
+      let newGameCalls = 0;
+      render(
+        <ComputerGameScreen
+          playerColour="white"
+          difficulty="gentle"
+          onExit={() => {}}
+          onNewGame={() => {
+            newGameCalls += 1;
+          }}
+          onRematch={() => {}}
+          engineOptions={{ createEngine: () => new ImmediateFakeEngine('e7e5') }}
+        />,
+      );
+      await screen.findByText(/white to move/i);
+      await user.click(screen.getByRole('button', { name: /^resign$/i }));
+      const dialog = await screen.findByRole('alertdialog', { name: /resign this game/i });
+      await user.click(within(dialog).getByRole('button', { name: /^resign$/i }));
+      await screen.findByText(/black wins by resignation/i);
+
+      await user.click(screen.getByRole('button', { name: /new game/i }));
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(newGameCalls).toBe(1);
+    });
+
+    it('Rematch is offered once the game ends and calls onRematch', async () => {
+      const user = userEvent.setup();
+      let rematchCalls = 0;
+      render(
+        <ComputerGameScreen
+          playerColour="white"
+          difficulty="gentle"
+          onExit={() => {}}
+          onNewGame={() => {}}
+          onRematch={() => {
+            rematchCalls += 1;
+          }}
+          engineOptions={{ createEngine: () => new ImmediateFakeEngine('e7e5') }}
+        />,
+      );
+      await screen.findByText(/white to move/i);
+      expect(screen.queryByRole('button', { name: /rematch/i })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /^resign$/i }));
+      const dialog = await screen.findByRole('alertdialog', { name: /resign this game/i });
+      await user.click(within(dialog).getByRole('button', { name: /^resign$/i }));
+
+      const rematchButton = await screen.findByRole('button', { name: /rematch/i });
+      await user.click(rematchButton);
+      expect(rematchCalls).toBe(1);
+    });
+  });
+
+  describe('Phase 3B: take back', () => {
+    it('is disabled until a move exists to take back, then restores the position on click', async () => {
+      const user = userEvent.setup();
+      render(
+        <ComputerGameScreen
+          playerColour="white"
+          difficulty="gentle"
+          onExit={() => {}}
+          onNewGame={() => {}}
+          onRematch={() => {}}
+          engineOptions={{ createEngine: () => new ImmediateFakeEngine('e7e5') }}
+        />,
+      );
+      await screen.findByText(/white to move/i);
+      expect(screen.getByRole('button', { name: /take back/i })).toBeDisabled();
+
+      await user.click(screen.getByRole('gridcell', { name: /^e2,/i }));
+      await user.click(screen.getByRole('gridcell', { name: /^e4(,|$)/i }));
+      await screen.findByRole('gridcell', { name: /^e5,.*black pawn/i });
+
+      const takebackButton = await screen.findByRole('button', { name: /^take back$/i });
+      await waitFor(() => expect(takebackButton).toBeEnabled());
+      await user.click(takebackButton);
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /take back/i })).toBeDisabled());
+      expect(screen.queryByRole('gridcell', { name: /^e5,.*black pawn/i })).not.toBeInTheDocument();
+      expect(await screen.findByText(/white to move/i)).toBeInTheDocument();
+    });
   });
 });

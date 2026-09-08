@@ -622,4 +622,233 @@ describe('useComputerGame', () => {
       expect(second.engines[0].startConfigs[0]).toEqual({ difficulty: 'strongest' });
     });
   });
+
+  describe('takeback (Phase 3B)', () => {
+    it('is unavailable before any player move, and calling it is a harmless no-op', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      expect(result.current.canTakeback).toBe(false);
+      act(() => result.current.takeback());
+      expect(engines).toHaveLength(1);
+      expect(engines[0].disposeCallCount).toBe(0);
+      expect(result.current.phase).toBe('player-turn');
+    });
+
+    it('after a completed computer reply, undoes the reply and the preceding player move', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      act(() => result.current.move('e2', 'e4'));
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
+      act(() => engines[0].resolveMove('e7e5'));
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+      expect(result.current.canTakeback).toBe(true);
+
+      act(() => result.current.takeback());
+      expect(engines[0].disposeCallCount).toBe(1);
+      await waitFor(() => expect(engines).toHaveLength(2));
+      act(() => engines[1].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      expect(result.current.snapshot.history).toHaveLength(0);
+      expect(result.current.snapshot.turn).toBe('white');
+      expect(result.current.canTakeback).toBe(false);
+    });
+
+    it('while the engine is still thinking after a player move, cancels that session and undoes only the player move', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      act(() => result.current.move('e2', 'e4'));
+      await waitFor(() => expect(result.current.phase).toBe('computer-thinking'));
+      expect(result.current.canTakeback).toBe(true);
+
+      act(() => result.current.takeback());
+      expect(engines[0].disposeCallCount).toBe(1);
+      await waitFor(() => expect(engines).toHaveLength(2));
+      act(() => engines[1].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+      expect(result.current.snapshot.history).toHaveLength(0);
+
+      // The abandoned engine's search finally "resolves" after the
+      // takeback already restored the position - this stale reply must
+      // never reach the restored state.
+      expect(() => engines[0].resolveMove('e7e5')).not.toThrow();
+      expect(result.current.phase).toBe('player-turn');
+      expect(result.current.snapshot.history).toHaveLength(0);
+    });
+
+    it("player Black's opening-move boundary: disabled until the player's first move, and never undoes the computer's opening move", async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('black', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
+      act(() => engines[0].resolveMove('e2e4'));
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      // The computer has made its (forced) opening move, but the player
+      // has not yet moved - nothing of the player's to restore yet.
+      expect(result.current.canTakeback).toBe(false);
+      act(() => result.current.takeback());
+      expect(engines).toHaveLength(1);
+
+      act(() => result.current.move('e7', 'e5'));
+      await waitFor(() => expect(result.current.phase).toBe('computer-thinking'));
+      expect(result.current.canTakeback).toBe(true);
+
+      act(() => result.current.takeback());
+      await waitFor(() => expect(engines).toHaveLength(2));
+      act(() => engines[1].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      // Back to exactly one ply - the computer's opening move survives.
+      expect(result.current.snapshot.history.map((m) => m.uci)).toEqual(['e2e4']);
+      expect(result.current.canTakeback).toBe(false);
+    });
+
+    it('repeated takeback keeps returning to the previous player decision point', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      act(() => result.current.move('e2', 'e4'));
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
+      act(() => engines[0].resolveMove('e7e5'));
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      act(() => result.current.move('g1', 'f3'));
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(2));
+      act(() => engines[0].resolveMove('b8c6'));
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+      expect(result.current.snapshot.history).toHaveLength(4);
+
+      act(() => result.current.takeback());
+      await waitFor(() => expect(engines).toHaveLength(2));
+      act(() => engines[1].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+      expect(result.current.snapshot.history).toHaveLength(2);
+
+      act(() => result.current.takeback());
+      await waitFor(() => expect(engines).toHaveLength(3));
+      act(() => engines[2].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+      expect(result.current.snapshot.history).toHaveLength(0);
+      expect(result.current.canTakeback).toBe(false);
+    });
+
+    it('after a board-derived terminal result, restores a usable engine and returns to the position before the game ended', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      // Fool's mate: White plays badly, Black (the engine) delivers mate
+      // on its second move - see the equivalent test above this describe
+      // block for the same fixed sequence.
+      act(() => result.current.move('f2', 'f3'));
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
+      act(() => engines[0].resolveMove('e7e5'));
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      act(() => result.current.move('g2', 'g4'));
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(2));
+      act(() => engines[0].resolveMove('d8h4'));
+      await waitFor(() => expect(result.current.phase).toBe('game-over'));
+      expect(engines[0].disposeCallCount).toBe(1);
+      expect(result.current.canTakeback).toBe(true);
+
+      act(() => result.current.takeback());
+      await waitFor(() => expect(engines).toHaveLength(2));
+      act(() => engines[1].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      expect(result.current.snapshot.outcome).toEqual({ status: 'in-progress' });
+      expect(result.current.snapshot.history.map((m) => m.uci)).toEqual(['f2f3', 'e7e5']);
+    });
+
+    it('takeback works from engine-error (a failed search), recovering with a fresh engine', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      act(() => result.current.move('e2', 'e4'));
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
+      act(() => engines[0].rejectMove(new Error('engine worker error')));
+      await waitFor(() => expect(result.current.phase).toBe('engine-error'));
+      expect(result.current.canTakeback).toBe(true);
+
+      act(() => result.current.takeback());
+      await waitFor(() => expect(engines).toHaveLength(2));
+      act(() => engines[1].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      expect(result.current.snapshot.history).toHaveLength(0);
+      expect(result.current.engineError).toBeNull();
+    });
+  });
+
+  describe('resign (Phase 3B)', () => {
+    it('ends the game immediately with an explicit resignation result and disposes the engine', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      act(() => result.current.resign());
+
+      expect(result.current.phase).toBe('game-over');
+      expect(result.current.snapshot.outcome).toEqual({ status: 'resigned', winner: 'black' });
+      expect(engines[0].disposeCallCount).toBe(1);
+    });
+
+    it('is a no-op once the game has already ended, and disables takeback afterwards', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      act(() => result.current.move('e2', 'e4'));
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
+      act(() => engines[0].resolveMove('e7e5'));
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+      expect(result.current.canTakeback).toBe(true);
+
+      act(() => result.current.resign());
+      expect(engines[0].disposeCallCount).toBe(1);
+      expect(result.current.canTakeback).toBe(false);
+
+      act(() => result.current.resign());
+      expect(engines[0].disposeCallCount).toBe(1);
+
+      act(() => result.current.takeback());
+      expect(engines).toHaveLength(1);
+      expect(result.current.snapshot.outcome).toEqual({ status: 'resigned', winner: 'black' });
+    });
+
+    it('a late reply from the disposed engine after resignation cannot alter the resigned outcome', async () => {
+      const { createEngine, engines } = engineFactory();
+      const { result } = renderHook(() => useComputerGame('white', { createEngine }));
+      act(() => engines[0].resolveStart());
+      await waitFor(() => expect(result.current.phase).toBe('player-turn'));
+
+      act(() => result.current.move('e2', 'e4'));
+      await waitFor(() => expect(engines[0].findBestMoveCalls).toHaveLength(1));
+
+      act(() => result.current.resign());
+      expect(result.current.snapshot.outcome).toEqual({ status: 'resigned', winner: 'black' });
+
+      expect(() => engines[0].resolveMove('e7e5')).not.toThrow();
+      expect(result.current.phase).toBe('game-over');
+      expect(result.current.snapshot.outcome).toEqual({ status: 'resigned', winner: 'black' });
+    });
+  });
 });
