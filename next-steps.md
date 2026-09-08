@@ -38,17 +38,15 @@ UI rather than inferring it from disabled buttons. One fixed search time
 (1000ms) - no difficulty UI yet, that is Phase 3. Local two-player is
 unchanged.
 
-## Phase 3A: adjustable bot strength - implemented, pending review
+## Phase 3A: adjustable bot strength - merged, offline regression hotfixed
 
-Reference: pocket-chess-build-spec.md section 14. Implemented and passing
-all automated checks (`npm test`/`npm run lint`/`npm run build`/
-`npm run test:engine`/`npm run test:e2e`) on branch
-`feature/phase-3a-bot-strength` - **not yet merged to `main`**. Still
-outstanding before this slice can be called done: independent (Codex)
-review/GO, and the physical-iPhone + offline acceptance check (this slice
-has only been checked in an emulated mobile viewport and against the
-production build locally, not on real hardware or with the network
-disabled). This is a scoped-down slice of
+Reference: pocket-chess-build-spec.md section 14. Reviewed (GO obtained)
+and merged to `main`. Physical iPhone testing in Airplane Mode then found
+Play Computer failing offline in production - see the
+"Offline Play Computer regression hotfix" entry below for the fix. Still
+outstanding before this slice can be called fully done: re-running the
+physical-iPhone + offline acceptance check against a fresh deploy that
+includes the hotfix. This is a scoped-down slice of
 Phase 3 - only the Stockfish `Skill Level` UCI option (`UCI_LimitStrength`
 explicitly `false`), not `UCI_Elo`/rating estimation. Four **provisional**
 presets (`gentle`=0, `casual`=5, `challenging`=10, `strongest`=20 - see
@@ -66,6 +64,41 @@ games), fixed for the session; a compact badge in `ComputerGameScreen`
 shows the active label. Still deferred to a later Phase 3B: random colour
 selection, undo/resign/restart, and any player-facing rating estimate.
 
+## Offline Play Computer regression hotfix - implemented, pending review
+
+Reference: branch `hotfix/play-computer-offline-regression`, off `main`
+(includes the merged Phase 3A). Physical iPhone testing in Airplane Mode
+found Play Computer failing offline in production ("The computer opponent
+ran into a problem.") - a real, confirmed failure on real hardware. This
+happened despite working online and despite the vendored engine's
+`.js`/`.wasm` both being correctly precached (verified directly against
+the generated service worker's precache manifest - see the hotfix's own
+commit message). Also confirmed: a real, fully-offline reproduction
+(actual Worker, actual vendored WASM, actual service worker and Cache
+Storage, network hard-disabled) passes cleanly on desktop Chromium - the
+failure was not reproduced in this environment. Working hypothesis, not a
+confirmed root cause (no physical iPhone or real WebKit browser was
+available to test against in this environment): a platform-specific
+(WebKit/iOS Safari) startup or cache-timing issue in how a service worker
+interacts with resources a *nested* dedicated Worker fetches for itself -
+a plausible category given documented past WebKit bugs in this area, but
+not verified against the actual device. Fix (both in the engine/
+application layers, no vendored-file or CSP changes) targets this
+hypothesis without depending on it being exactly right:
+`StockfishAdapter`'s handshake timeout raised from 10s to 15s, on the
+reasoning that WASM read-from-cache-and-compile on real mobile hardware
+could plausibly take longer than in CI/desktop testing (no on-device
+timing measurement was taken to confirm this); `useComputerGame`'s engine
+start-up now gets one automatic, transparent retry (a fresh Worker, same
+`sessionConfig`) before ever surfacing `engine-error` to the player - the
+existing manual Retry button is unchanged and remains the fallback if
+both attempts fail. A real, fully-offline Playwright e2e test
+(`tests/e2e/play-computer.spec.ts`) now exercises the actual service
+worker + Cache Storage + real Worker/WASM with the network hard-disabled.
+Outstanding: physical iPhone Airplane Mode validation of this fix against
+a fresh deploy is still required and has not yet been performed - the
+underlying platform-specific cause remains unconfirmed until then.
+
 ## Production bug fix: WASM blocked by CSP - done
 
 Production (unlike local validation) blocked `WebAssembly.instantiate()`
@@ -79,7 +112,7 @@ allowance, not the broader `unsafe-eval`. No other CSP directive changed.
 - Phase 3B: the rest of build spec Phase 3 - player Elo
   estimation/rating display, undo/resign/restart polish for the
   computer-game flow, random colour selection. (Skill Level difficulty is
-  implemented pending review, not merged - see Phase 3A above. Phase 3B
+  merged - see Phase 3A above. Phase 3B
   should not start until Phase 3A is reviewed and merged.)
 - Phase 4: IndexedDB persistence (settings, games, puzzle progress).
 - Phase 5: puzzle pipeline (Lichess CC0 dataset preprocessing script,
