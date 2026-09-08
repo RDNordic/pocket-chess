@@ -76,6 +76,12 @@ export function AboutScreen({ onExit }: AboutScreenProps) {
             notices for the exact source pointer. Not yet wired into any
             user-facing feature.
           </li>
+          <li>
+            <strong>Chess piece artwork</strong> (GPLv2+, the "cburnett" set
+            by Colin M.L. Burnett, as vendored by the Lichess project) -
+            recoloured only; see the third-party notices for the exact
+            source and licence details.
+          </li>
         </ul>
         <p>
           <a href={thirdPartyNoticesHref} target="_blank" rel="noopener noreferrer">

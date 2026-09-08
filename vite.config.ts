@@ -14,6 +14,21 @@ const basePath = process.env.VITE_BASE_PATH ?? '/';
 
 export default defineConfig({
   base: basePath,
+  build: {
+    // Disables Vite's default behaviour of inlining small imported assets
+    // (anything under 4KB) as base64 `data:` URIs directly in the JS
+    // bundle. Added for the local chess-piece SVG artwork
+    // (src/components/board/pieces/*.svg, all well under that threshold) -
+    // a `data:` URI would be blocked by the production CSP's
+    // `img-src 'self'` (no `data:`), and this project does not weaken the
+    // CSP to add it. `0` forces every such asset to instead be emitted as
+    // a real, separately-served, same-origin file - not a service-worker/
+    // precache behaviour change (those still-separate files still match
+    // `workbox.globPatterns`'s existing `svg` pattern below, same as any
+    // other built SVG). No other asset in this project currently relies on
+    // inlining.
+    assetsInlineLimit: 0,
+  },
   plugins: [
     react(),
     VitePWA({
