@@ -21,3 +21,7 @@ coverage
 # continuing work locally (see AGENTS.md's Handoff docs section); too
 # noisy/verbose for the public repository. Untracked as of Phase 1 close.
 session-handoff.md
+
+# Local chat context and generated browser-review screenshots.
+/gpt-context-handoff.md
+/output/playwright/

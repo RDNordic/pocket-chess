@@ -1793,3 +1793,27 @@ The database is not the live game state.
 The chess domain is authoritative.
 
 That boundary should remain boring, explicit, and testable.
+
+# 54. Authorised Kids Mode M0/M1 amendment - 2026-10-06
+
+The user authorises M0 followed by M1 only from `plan-build.md`, using the
+recommended defaults needed for those milestones. This overrides the old phase
+order for this bounded headless puzzle foundation; persistence and application
+screens are not prerequisites and are not authorised here. Kids lessons and
+cosmetic milestones are planned exceptions to section 3's old product non-goals,
+not permission to implement them during M1. Later release choices remain open.
+
+For this slice, sections 20/21's canonical-line comparison is superseded by
+objective validation covering all winning alternatives and required defences.
+Support only checkmate within one/two player moves and explicit capture goals.
+Use six synthetic test fixtures, not a production content library or the old
+5,000-puzzle target. Preparation is bounded and exhaustive; normal session play
+uses validated branch data. Three authored hints per reachable decision are
+requested explicitly, never automatically. Retry restores the missed decision;
+replay is read-only and completion is emitted once per loaded session.
+
+Keep sections 6, 26, 49 and 53's authority/privacy boundaries. No UI, storage,
+engine refactor, dependencies, asset acquisition, external integration, commits
+or deployment. The current configured Codex carries out this authorised work;
+independent review is a separate subsequent step. Existing Phase 3B follow-up
+review and physical acceptance remain unresolved and do not block M1.

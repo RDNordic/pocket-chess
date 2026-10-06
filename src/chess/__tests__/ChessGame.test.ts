@@ -5,6 +5,36 @@ import { ChessGame, ChessGameError } from '../ChessGame';
 import type { SquareId } from '../chessTypes';
 
 describe('ChessGame', () => {
+  it('enumerates distinct promotion choices and returns detached legal move descriptors', () => {
+    const game = new ChessGame('7k/4P3/8/8/8/8/8/K7 w - - 0 1');
+    const before = game.getSnapshot();
+    const moves = game.legalMoves();
+    expect(moves.filter(m => m.from === 'e7').map(m => m.promotion).sort()).toEqual(['b', 'n', 'q', 'r']);
+    moves[0].uci = 'tampered';
+    expect(game.legalMoves().some(m => m.uci === 'tampered')).toBe(false);
+    expect(game.getSnapshot()).toEqual(before);
+  });
+
+  it('projects adult moves with full history without altering the authoritative game', () => {
+    const game = new ChessGame();
+    game.applyMove({ from: 'e2', to: 'e4' });
+    const before = game.getSnapshot();
+    const projection = game.projectMove({ from: 'e7', to: 'e5' })!;
+    expect(projection.history).toHaveLength(2);
+    projection.undoLastMove();
+    expect(game.getSnapshot()).toEqual(before);
+    expect(game.projectMove({ from: 'e7', to: 'e4' })).toBeNull();
+    expect(game.getSnapshot()).toEqual(before);
+  });
+
+  it('projection retains repetition draw history', () => {
+    const game = new ChessGame();
+    for (const uci of ['g1f3', 'g8f6', 'f3g1', 'f6g8', 'g1f3', 'g8f6', 'f3g1']) game.applyUciMove(uci);
+    const projection = game.projectMove({ from: 'f6', to: 'g8' })!;
+    expect(projection.getSnapshot().outcome).toEqual({ status: 'draw', reason: 'threefold-repetition' });
+    expect(game.isGameOver).toBe(false);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });

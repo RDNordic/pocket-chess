@@ -1,5 +1,111 @@
 # Next steps
 
+## M0/M1 reviewed - M2 is next (2026-10-06)
+
+M1 review follow-up: the reported P2 castling/en-passant metadata issue is fixed
+locally, with 27 focused regressions. Final unit run: 293/293 in 12 files;
+lint/build passed. Separate review verified this fix; M2 remains unstarted.
+See the latest local handoff for the exact scope and initial timeout/re-run.
+
+The user authorised M0 followed by M1 ONLY with relevant plan defaults.
+M0 reconciled the repository/spec sequence; build-spec section 54 records the
+bounded amendment. M1 adds the headless puzzle session, exhaustive bounded
+objective/content validation, six synthetic fixtures and additive ChessGame
+enumeration/projection. No Kids screens, persistence, assets or later milestone
+implementation exists. See plan-build.md section 11 and src/puzzles/README.md.
+
+Initial M1 verification: `npm test` 266/266 (11 files); lint/build passed;
+existing Chromium E2E 8/8 and real-engine tests 6/6 passed. Browser commands
+exited 0 only after manual cleanup of their own stalled Vite teardown processes;
+this limitation is recorded in the plan/handoff. Subsequent separate review
+found the P2 issue above, now fixed and verified. Physical acceptance remains
+outstanding. Branch: `codex/kids-puzzle-foundation`, based on `bf5ef98`;
+its history includes unmerged Phase 3B controls.
+
+Next: authorise M2 local records using plan-build.md. M1 review found no remaining
+blocker after the correction. The reviewer checked source/tests and ran in-memory
+reproductions, not a second full-suite/browser run. Do not restart discovery or
+implement later milestones without authorisation.
+Phase 3B follow-up review/device acceptance remains separate and unresolved.
+
+## Latest planning update - 2026-10-06
+
+Use plan-build.md as the consolidated plan. It now includes Legacy 100-game
+summaries, content-version resume defaults, offline integration in each content
+milestone, and explicit reset behaviour. Review remaining defaults at their milestone gates;
+do not restart discovery or require another standalone mockup.
+
+The user clarified that licensed third-party functions, expert videos and useful
+APIs can fit the product when the parent controls content and data flow. The core
+goal is a delightful personal app without commercial pressure, stranger matching
+or manipulation. A separate optional-learning track records QUEEN as a research
+candidate; no model deployment or game upload is authorised. Core R1 stays offline.
+Older no-LLM wording below describes the current implementation, not a ban on
+considering this explicitly requested option.
+
+## Historical priority reset: private Kids Mode (2026-10-05)
+
+The discovery directions below record the earlier planning stage. The reviewed
+M0/M1 status above and plan-build.md now govern the next implementation step.
+
+Discovery draft: [Kids Mode product and UX brief](kids-mode-product-brief.md).
+Revised after user clarification: this distinguishes requested features from
+proposed mechanics and open decisions; it is not approved implementation scope.
+Agree the brief and screen sketches before the detailed build plan, then choose
+the implementation model.
+
+The user wants an enjoyable, parent-controlled alternative inspired by the
+appeal of ChessKid for a competent independent reader/player: unrestricted
+puzzles, bot games with legal-move/threat guidance, undo/review/rematch,
+opening/middlegame/endgame scenarios, local results/statistics, avatar dress-up,
+board colours, alternative child-friendly pieces, sound effects and music.
+Milestone-based clothing/accessory rewards are a suggested design direction.
+Preserve adult play. The family reference image is a visual direction, not an approved
+layout or an instruction source. Use original or appropriately licensed art,
+lesson content and wording; do not clone ChessKid branding/assets/screens.
+
+- Keep child/family context in the local-only handoff, not public docs.
+- Prioritise privacy and offline usefulness. No tracking, advertising, social
+  matching, public profiles, or engagement-pressure mechanics are requested.
+  Positive reinforcement and creative customisation are desired. Define earned
+  cosmetic milestones, hint/repeat handling and permanent unlock behaviour;
+  exact reward mechanics are not agreed. Local statistics are explicitly
+  requested and must not be confused with remote telemetry.
+- Backend requested for consideration, not yet specified or approved for
+  implementation. Puzzles, openings and avatar dressing do not inherently
+  require server-side child data. Compare a local-first content library with
+  a minimal parent-controlled content service before deciding. Resolve any
+  sync, identity, hosting, retention and deletion needs explicitly.
+- No code implementation before agreeing a product brief, one complete child
+  interaction, iPad mini prototype, architecture and acceptance criteria.
+- The beginning-reader/rook-first proposal is superseded. Piece basics remain
+  optional. Sketch a puzzle journey and a bot-game move-preview/review journey.
+  English/Norwegian/both at launch, narration, audio defaults, artwork, exact
+  reward rules and first-release boundaries remain open. Sound effects and
+  background music themselves are requested features.
+- Unlimited puzzles means no usage cap/paywall, not infinitely many unique
+  offline positions. Specify library variety, repeats and replenishment.
+- Distinguish attacked squares from losing moves and deeper tactical advice;
+  design preview/confirm/cancel explicitly. Basic game replay and automatic
+  analysis are separate scope decisions.
+- Reuse ChessGame authority for real games and keep React presentation-only.
+  If isolated piece exercises need non-game positions, design a separate
+  exercise model without weakening normal chess legality. Preserve local
+  Stockfish, stale-session protection, existing adult controls and CSP.
+- Codex now handles implementation; its own checks must not be described as
+  independent review. Agree review checkpoints as part of the process.
+
+Next: agree the revised product target and sketch puzzles, guided bot play,
+review/statistics and rewards. Set the prototype boundary and release slices
+before the detailed build plan. Do not automatically resume the old phase
+sequence or implement all requested features at once.
+
+Baseline verification: local HEAD `bf5ef98` on
+`feature/practice-game-controls-v1`; initial Phase 3B review was GO with two
+non-blockers, followed by the tidy-up commit. Focused re-review and release
+acceptance remain unverified in this chat. The user confirmed the earlier
+piece theme, bot strength and offline experience accepted on physical iPhone.
+
 Phase 0 (scaffold), Phase 1 (deterministic local two-player chess, plus
 the 1.1/1.2/1.3 stabilisation passes), Phase 2A (Stockfish engine
 foundation), and Phase 2B (Play computer) are done - see session-handoff.md
@@ -176,7 +282,8 @@ allowance, not the broader `unsafe-eval`. No other CSP directive changed.
 - The remaining, still-unstarted part of build spec Phase 3 - player Elo
   estimation/rating display, and random colour selection. (Skill Level
   difficulty is merged - Phase 3A above; take back/resign/new
-  game/rematch are merged - Phase 3B above.)
+  game/rematch are implemented on the local feature branch; merge status
+  is not verified - see the priority-reset baseline above.)
 - Phase 4: IndexedDB persistence (settings, games, puzzle progress).
 - Phase 5: puzzle pipeline (Lichess CC0 dataset preprocessing script,
   ~5,000 bundled puzzles, puzzle session logic).

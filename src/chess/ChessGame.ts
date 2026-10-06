@@ -86,6 +86,18 @@ export class ChessGame {
     return game;
   }
 
+  /** Legal moves including distinct promotion choices; no board mutation. */
+  legalMoves(): readonly AppliedMove[] {
+    return this.chess.moves({ verbose: true }).map(toAppliedMove);
+  }
+
+  /** Disposable domain-owned projection retaining history/draw semantics. */
+  projectMove(request: MoveRequest): ChessGame | null {
+    if (!request || typeof request !== 'object') return null;
+    const projected = ChessGame.fromPgn(this.pgn);
+    return projected.applyMove(request) ? projected : null;
+  }
+
   /**
    * Legal destination squares for a given source square. A pawn one step
    * from promotion has four verbose move descriptors from chess.js (one per

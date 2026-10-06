@@ -9,6 +9,60 @@ sibling projects.
 Offline-first personal chess trainer PWA. Full specification:
 pocket-chess-build-spec.md (read it before making architectural decisions).
 
+## Current priority - M1 reviewed; prepare M2 (2026-10-06)
+
+The user authorised M0 and M1 only, using relevant plan defaults. Both are
+implemented and separately reviewed, with the P2 follow-up verified fixed. See plan-build.md's
+execution/verification notes and the latest session-handoff.md entry. M1 adds
+`src/puzzles/` headless session/validation and six synthetic test fixtures, plus
+additive ChessGame legal enumeration/projection. No Kids UI or persistence exists.
+Do not begin M2 or later work without new authorisation. Later release choices,
+connected-learning options and Phase 3B review/device acceptance remain open.
+Build-spec section 54 supersedes older phase sequencing only for this slice.
+The separate M1 review's P2 FEN-metadata finding has a local fix: original
+start/source castling and en-passant structure is checked before ChessGame
+evaluation. Implementation checks report 293 unit tests, lint and build passing.
+Separate read-only review reproduced rejection of both reported malformed FENs
+at start/source boundaries and preservation of all four castles and both
+en-passant colours. No remaining M1 review blocker; physical acceptance is separate.
+The reviewed foundation is on `codex/kids-puzzle-foundation`, based on `bf5ef98`;
+its ancestry includes the still-unmerged Phase 3B controls.
+
+Kids Mode release discovery remains in the planning documents. Read
+the latest entry in local `session-handoff.md`, `kids-mode-product-brief.md`
+and `next-steps.md`. Design for a competent independent reader/player:
+unrestricted puzzles, bot games with guidance/undo/review/rematch, openings,
+middlegame/endgame practice, local statistics, avatar dress-up, board/piece
+themes, sound effects and music. Milestone cosmetic rewards are under design.
+Piece basics are optional, not the main onboarding. The brief separates
+requested features from proposed mechanics and unresolved release boundaries.
+ChessKid is a UX reference, not a source of artwork,
+branding, text, or lesson content to copy. Preserve the existing adult mode.
+
+The user has requested consideration of a backend. This reopens that product
+decision for planning; it does not authorise deployment, data uploads, child
+accounts, tracking, or relaxing the current architecture. First establish
+whether bundled content and on-device storage meet the needs, then define any
+necessary server responsibilities and data flows. Before shipping a changed
+privacy architecture, review and update the build spec, README and in-app
+About/Privacy together. Existing no-backend rules describe the current
+implementation, not a prohibition on discussing the newly requested option.
+
+Product clarification (2026-10-06): parent-controlled enjoyment and learning,
+without commercial/retention pressure, is the priority. The user welcomes
+evaluation of licensed third-party functions, curated expert videos and chess
+explanation APIs. Existing no-backend/no-LLM rules remain the current runtime
+baseline, not a blanket ban on planning these optional additions. No provider,
+data upload or deployment is thereby authorised. Keep core play complete offline;
+record explicit data flows and update privacy documents before changed behaviour
+ships. See plan-build.md for defaults and the separate connected-learning track.
+
+Current local baseline: `feature/practice-game-controls-v1` at `bf5ef98`.
+The initial Phase 3B commit received GO with two non-blocking follow-ups;
+the follow-up commit has not been independently re-reviewed in this chat.
+Merge/deployment/physical acceptance of Phase 3B are not established here.
+Do not infer them from older, contradictory roadmap wording.
+
 ## Source of truth for behaviour rules
 
 pocket-chess-build-spec.md, section 49 ("Claude Code implementation rules")

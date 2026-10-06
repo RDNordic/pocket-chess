@@ -11,6 +11,34 @@ that mode).
 
 ## Build specification
 
+Current execution status (2026-10-06): authorised M0/M1 are implemented and
+separately reviewed; the P2 metadata-validation fix was verified with no remaining
+M1 blocker. Work branch: `codex/kids-puzzle-foundation`, based on `bf5ef98`
+(includes unmerged Phase 3B controls). Read plan-build.md's execution notes
+and the latest session-handoff entry. `src/puzzles/` is headless and not wired
+into the app; no M2 persistence or Kids screens were started. M2 is the next
+milestone and requires its own authorisation. Build-spec section 54 permits this bounded sequence
+ahead of older persistence phases; later product choices remain open.
+
+Current planning priority (2026-10-05): see AGENTS.md's Kids Mode planning
+section, kids-mode-product-brief.md and next-steps.md. The revised audience is
+an independent reader/player; puzzles, bot games, guidance, replay/statistics
+and opening/middlegame/endgame practice lead. Themes, avatar customisation,
+sound effects and music are requested; milestone rewards are being designed.
+Do not resume the superseded rook-first/beginning-reader proposal.
+The user has moved implementation responsibility
+to Codex; do not assume the former Claude-implements/Codex-reviews workflow.
+Planning precedes implementation. A requested backend is an open architecture
+decision requiring a concrete purpose and privacy review, not permission to
+deploy services or upload child data. The existing no-backend rules below
+remain the current implementation baseline while that option is evaluated.
+
+The 2026-10-06 clarification also permits planning parent-controlled third-party
+tools, curated videos and chess explanation APIs. Do not misread the runtime
+non-negotiables below as prohibiting their evaluation. Core offline play remains;
+new live data flows need a concrete approved design and coordinated privacy docs.
+Fun, autonomy and freedom from sales/retention pressure are the product goals.
+
 Read pocket-chess-build-spec.md before any non-trivial change. It defines
 product scope, architecture boundaries, phased delivery plan, licensing
 requirements, and explicit non-goals. Treat its "Claude Code implementation
