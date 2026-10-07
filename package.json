@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
     "test:engine": "playwright test --config=playwright.engine.config.ts",
+    "test:storage": "node scripts/test-storage.mjs",
     "lint": "tsc -b",
     "cf:dev": "npm run build && node scripts/wrangler-workspace.mjs dev",
     "cf:deploy": "npm run build && wrangler deploy",

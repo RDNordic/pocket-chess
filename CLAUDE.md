@@ -11,13 +11,25 @@ that mode).
 
 ## Build specification
 
-Current execution status (2026-10-06): authorised M0/M1 are implemented and
+Current execution status (2026-10-07): M2 and both P2 fixes are separately
+reviewed by source/test inspection and targeted in-memory reproductions, without
+a full-suite rerun. Physical acceptance remains separate. Commit/push the
+reviewed M2 checkpoint, then implement authorised M3 only. Content/art acquisition
+requires approval of a bounded proposal. Leave M3 local for review; no M4, merge
+or deployment. Unmerged Phase 3B ancestry has not acquired acceptance.
+
+Prior execution checkpoint (2026-10-06): authorised M0/M1 are implemented and
 separately reviewed; the P2 metadata-validation fix was verified with no remaining
 M1 blocker. Work branch: `codex/kids-puzzle-foundation`, based on `bf5ef98`
 (includes unmerged Phase 3B controls). Read plan-build.md's execution notes
 and the latest session-handoff entry. `src/puzzles/` is headless and not wired
-into the app; no M2 persistence or Kids screens were started. M2 is the next
-milestone and requires its own authorisation. Build-spec section 54 permits this bounded sequence
+into the app. Subsequently authorised M2 is implemented locally/uncommitted in
+`src/storage/`, with versioned native IndexedDB records, recovery/reset contracts,
+atomic results/awards and Legacy ledger. Two P2 M2-review corrections are local:
+session-aware completion/durable lifecycle fences and validated prefixed evidence
+IDs. 340 unit tests, 13 native Chromium storage cases, lint/build passed.
+Stop for separate fix review; no M3 screens or
+runtime storage integration. Build-spec sections 54/55 permit this bounded sequence
 ahead of older persistence phases; later product choices remain open.
 
 Current planning priority (2026-10-05): see AGENTS.md's Kids Mode planning

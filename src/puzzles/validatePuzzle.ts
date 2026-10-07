@@ -91,6 +91,8 @@ function position(fen: unknown): ChessGame {
   requireContent(!new ChessGame(fields.join(' ')).getSnapshot().isCheck, 'Non-moving king in check');
   return game;
 }
+/** Shared record boundary; evaluation remains in ChessGame. */
+export { position as validatePosition };
 
 /** Checks a capture against the exact target, including en passant removal. */
 export function capturedGoal(objective: PuzzleObjective, before: GameStateSnapshot,

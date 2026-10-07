@@ -1817,3 +1817,19 @@ engine refactor, dependencies, asset acquisition, external integration, commits
 or deployment. The current configured Codex carries out this authorised work;
 independent review is a separate subsequent step. Existing Phase 3B follow-up
 review and physical acceptance remain unresolved and do not block M1.
+
+# 55. Authorised Kids Mode M2 amendment - 2026-10-06
+
+M1 is separately reviewed, including verification of its P2 metadata correction.
+The user now authorises M2 only, using plan-build.md's relevant defaults. Add
+headless versioned native IndexedDB repositories, record validation/migration,
+checkpoint recovery, coherent result/award writes and explicit storage failures.
+The plan's content-version recovery, reset matrix, durable duplicate prevention
+and compact Legacy ledger supersede section 24's earlier example shapes and
+statistics limited to retained replay details. Keep at most 100 completed replay
+details; retain compact results and stable first-completion order independently.
+
+Preserve sections 6/26/49/53 and ChessGame authority. The repository is not wired
+into application screens during M2. No M3 screens, acquired content, dependencies,
+integrations, external uploads, commits or deployment are authorised. Record
+implementation checks separately from M2 review and physical acceptance.

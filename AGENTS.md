@@ -9,16 +9,33 @@ sibling projects.
 Offline-first personal chess trainer PWA. Full specification:
 pocket-chess-build-spec.md (read it before making architectural decisions).
 
-## Current priority - M1 reviewed; prepare M2 (2026-10-06)
+## Current priority - M2 reviewed; M3 authorised (2026-10-07)
 
-The user authorised M0 and M1 only, using relevant plan defaults. Both are
+Separate review verified both M2 P2 corrections through source/test inspection
+and targeted in-memory reproductions; it did not rerun the full suites. M2 is
+reviewed, with physical acceptance separate. The user authorised committing and
+pushing the reviewed M2 checkpoint, then M3 only under plan-build.md. Acquisition
+requires a bounded proposal and approval. Leave M3 changes local for separate
+review; no M4, merge or deployment. Phase 3B acceptance remains unresolved.
+
+The following records the prior implementation checkpoint:
+
+The user authorised M0/M1, followed by M2 only, using relevant plan defaults. M0/M1 are
 implemented and separately reviewed, with the P2 follow-up verified fixed. See plan-build.md's
 execution/verification notes and the latest session-handoff.md entry. M1 adds
 `src/puzzles/` headless session/validation and six synthetic test fixtures, plus
-additive ChessGame legal enumeration/projection. No Kids UI or persistence exists.
-Do not begin M2 or later work without new authorisation. Later release choices,
+additive ChessGame legal enumeration/projection. M2 now adds headless native
+IndexedDB repositories in `src/storage/`, with validation/migration, checkpoint
+recovery, atomic result/award writes, reset protection and compact Legacy ledger.
+These modules are not wired into the application. M2 is local/uncommitted and
+awaits separate fix review. M2 review found two P2 issues (activity lifecycle and
+prefixed evidence ID validation); both are corrected locally. Final checks:
+340 unit tests, 13 native IndexedDB Chromium cases, lint/build passed. Completion
+intents now require a session ID; durable lifecycle metadata protects deleted
+checkpoints and newer replays. See `src/storage/README.md` and plan-build.md section 12.
+Do not begin M3 or later work without new authorisation. Later release choices,
 connected-learning options and Phase 3B review/device acceptance remain open.
-Build-spec section 54 supersedes older phase sequencing only for this slice.
+Build-spec sections 54/55 supersede older phase sequencing only for these slices.
 The separate M1 review's P2 FEN-metadata finding has a local fix: original
 start/source castling and en-passant structure is checked before ChessGame
 evaluation. Implementation checks report 293 unit tests, lint and build passing.

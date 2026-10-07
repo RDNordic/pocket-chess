@@ -1,6 +1,47 @@
 # Next steps
 
-## M0/M1 reviewed - M2 is next (2026-10-06)
+## M2 separately reviewed; M3 authorised (2026-10-07)
+
+Both M2 P2 corrections were independently verified through source/test inspection
+and targeted in-memory reproductions; the reviewer did not rerun the full suites.
+Implementation evidence remains 340/340 unit tests, 13/13 native storage cases,
+lint/build passing. Physical acceptance remains separate.
+
+Save the reviewed M2 checkpoint to the current branch/origin, then implement
+M3 only per plan-build.md. Obtain approval before acquiring 30 source puzzles
+and the chosen Kenney artwork. M3 changes stay local for separate review and
+physical iPad acceptance. No M4, merge or deployment; Phase 3B remains unaccepted.
+
+The entries below record earlier checkpoints, not current authorisation.
+
+## M2 implemented - stop for separate review (2026-10-06)
+
+M2 review follow-up: corrected the two reported P2 issues only. Completion now
+requires its session ID, returns exact duplicates without mutation and retains
+durable lifecycle revision/closed-session records. Namespaced award evidence
+validates the source's 200-character limit separately from its prefix; generated
+records are checked before committing. Final checks: 340/340 unit tests (14
+files), 13/13 native IndexedDB Chromium cases, lint/build and diff check passed.
+Next: separate verification of these fixes; M3 remains unauthorised.
+
+M1 and its P2 correction are separately reviewed; physical acceptance/deployment
+remain separate. The user then authorised M2 only. `src/storage/` now provides
+versioned native IndexedDB repositories, validation/explicit migration, content
+checkpoint recovery, atomic result/progress/award/inventory writes, revision
+deduplication, reset-race protection and the compact Legacy ledger.
+
+Initial implementation verification: 325/325 unit tests (13 files), six real IndexedDB Chromium cases,
+lint/build and diff check passed. Native tests include synthetic write/abort
+failures; these are not physical-device quota/eviction acceptance. Storage modules
+are headless and not imported by the application; adult production bundle unchanged.
+No M3 screens, dependencies, content acquisition, integrations, commits or deployment.
+
+Next: separately review M2 transactions, migrations/diagnostics, content recovery,
+result revisions/order, award evidence/inventory and reset epochs. Review
+`src/storage/README.md`, plan-build.md section 12 and latest local handoff.
+Do not implement M3 automatically. Phase 3B and device acceptance remain separate.
+
+## Prior checkpoint: M0/M1 reviewed (2026-10-06)
 
 M1 review follow-up: the reported P2 castling/en-passant metadata issue is fixed
 locally, with 27 focused regressions. Final unit run: 293/293 in 12 files;

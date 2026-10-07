@@ -1,8 +1,16 @@
 # Kids Mode - implementation and release plan
 
-Updated: 2026-10-06.
-Status: M0/M1 implemented and separately reviewed; later release scope
-remains a proposal. No Kids application UI or persistence has started.
+Updated: 2026-10-07.
+Status: M0/M1/M2 implemented and separately reviewed. M2's two P2 corrections
+were independently verified by source/test inspection and targeted in-memory
+reproductions; the review did not rerun full suites. Physical acceptance remains
+separate. The user authorised saving the reviewed M2 checkpoint, followed by M3
+only. Acquire content/art only after approval of a bounded proposal; leave M3
+local for separate review/device testing. No M4, merge or deployment. Phase 3B
+ancestry remains unmerged and its acceptance is not established by this review.
+Later release scope remains a proposal.
+No Kids application UI or runtime storage integration has started. M2's headless
+local records and exact verification are recorded in section 12 below.
 Execution update (2026-10-06): the user authorised M0 and M1 ONLY, using the
 defaults necessary for those milestones. Later product decisions remain open.
 The M0 repository check is complete: ChessGame already provides FEN/PGN,
@@ -569,3 +577,76 @@ Physical acceptance and the earlier browser teardown limitation remain separate.
 Workflow hygiene uses `codex/kids-puzzle-foundation`, based on `bf5ef98`; the
 branch includes the unmerged Phase 3B controls ancestry. M2 needs its own
 authorisation. Local chat context and generated screenshots are excluded from Git.
+
+## 12. M2 delivery and verification - 2026-10-06
+
+After the separate M1/P2 review, the user authorised M2 only with its recommended
+defaults. Section 55 records that bounded spec amendment. Native IndexedDB
+repositories in `src/storage/` implement separate versioned records for settings,
+detail/compact ledger, progress, checkpoints, awards/evidence and wardrobe.
+See its README for schema, migration, revision and transaction contracts.
+
+Record validation uses ChessGame for FEN/move/outcome reconstruction, sharing the
+reviewed raw metadata guard. Checkpoints retain content ID/exact version, session
+ID, start FEN, accepted UCI path and decision ply; matching puzzles resume through
+M1, changed content restarts and removed content returns selection. Scenario
+recovery requires a trusted branch adapter; actual scenarios remain M5 work.
+Content activation is caller-controlled, not automatic.
+
+Atomic writes reconcile revised game results under stable first-completion order,
+retain a compact ledger after pruning replay detail to 100, and grant the default
+three milestones using permanent distinct-ID evidence. Reset learning preserves
+awards/inventory; all four reset actions follow the matrix above. Reset invalidates
+local tokens immediately and persisted peer tokens on commit, preventing late
+resurrection. Explicit fresh-start can recover incompatible record metadata;
+failed resets/writes never report saved success. Unsupported records are retained
+and diagnosed; supported v1 migrations are explicit and transactional.
+
+| Check | Result |
+|---|---|
+| `npm test` | 13 files, 325/325 passed; exit 0; 35.31 seconds |
+| Focused storage tests after final migration assertion | 32/32 passed; exit 0; 11.76 seconds |
+| `npm run test:storage` | Six real IndexedDB cases in managed Chromium passed; exit 0; 2.1 seconds; clean server teardown |
+| `npm run lint` / `npm run build` | Both passed; exit 0; build 55 modules, 20 precache entries |
+| Diff/runtime scope | `git diff --check` passed; existing adult runtime source unchanged; built application hashes unchanged; no storage/harness in bundle |
+
+Tests cover reload/coexisting checkpoints, corruption/future versions, failed
+transactions/migrations/resets, stale and conflicting revisions, repeat/versioned
+completions, terminal reopening/re-completion, permanent rewards, reset races
+across instances, and Legacy boundaries 99/100/101/199/200 with corrections/pruning.
+Native tests inject write failures to check real transaction rollback; they do
+not simulate actual device storage eviction or establish iPad quota behaviour.
+The new test-only runner owns Vite in-process and closes cleanly; existing E2E
+and engine runners are unchanged and were not rerun for this headless slice.
+
+No new dependency or lockfile change. No app/engine/chess refactor, M3 UI, acquired
+content/assets, external integration/upload, commit or deployment. M2 is not yet
+independently reviewed or physically accepted. Stop for a separate M2 review;
+further milestones need new authorisation. No release scope is implicitly accepted.
+
+### M2 review correction follow-up - 2026-10-06
+
+The separate review reported two P2 issues: checkpoint resurrection/duplicate
+completion deleting a newer replay, and generated prefixed evidence exceeding
+the source-ID validator limit. This follow-up fixes only those issues.
+
+New completion intents require the session ID. Matching ID/version/session and
+a newer checkpoint revision are required for cleanup. Exact duplicate completion
+returns without mutation. Slot high-water marks and closed-session receipts are
+validated records in the existing metadata store; they survive checkpoint deletion,
+reload and peer connections. Intentional repeats use a new session ID and newer
+revision. Legacy stored progress remains readable and provides its revision floor;
+no missing session identity is invented. Learning/fresh resets clear lifecycle
+records under a new durable reset epoch. No IndexedDB layout/store change.
+
+Source IDs stay capped at 200 characters; award evidence validates its namespace
+and source separately, permitting up to 209 characters for `scenario:` evidence.
+Generated evidence/grant/lifecycle records are validated before insertion.
+Overlong/invalid IDs and failed completion writes leave all records unchanged.
+
+Verification: `npm test` 340/340 in 14 files (38.63 seconds), native storage
+13/13 (3.6 seconds, clean teardown), lint/build and diff check passed, all exit 0.
+Added 15 focused unit cases and seven native cases; updated existing completion
+tests to supply session IDs. Adult runtime/bundle remains unchanged. This is
+implementation verification; separate fix review and physical acceptance are
+pending. No dependencies, commits, deployment or M3 work.
